@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 from typing import List, Optional
 
-from . import (__version__, benchmark, catalog, chat, cluster, compress, config, finder, gguf, hardware, hub,
+from . import (__version__, benchmark, catalog, chat, cluster, compress, config, discover, finder, gguf, hardware, hub,
                planner, runtime, server, service, tuner)
 
 
@@ -52,7 +52,10 @@ def _print_plans(plans, top):
     for i, p in enumerate(plans[:top], 1):
         extra = " +draft" if p.draft else ""
         print(f"{i:<3}{p.model.name[:29]:<30}{p.quant.name:<13}{p.memory_gb:>6.1f}GB"
-              f"{p.est_tps:>8.1f} t/s{p.quality:>9.1f}  {p.ctx:<8}{_where(p)}{extra}")
+              f"{p.est_tps:>8.1f} t/s{('~' if p.model.estimated else '') + f'{p.quality:.1f}':>9}  "
+              f"{p.ctx:<8}{_where(p)}{extra}")
+    if any(p.model.estimated for p in plans[:top]):
+        print("~ quality estimated from size and release date (model found on Hugging Face)")
 
 
 def _cluster_notes(plan: planner.Plan) -> None:
@@ -68,6 +71,8 @@ def _cluster_notes(plan: planner.Plan) -> None:
 def _choose(args, nodes, show: int = 5):
     """Rank the catalog for these machines, then check the top models against the files that
     really exist on Hugging Face (exact sizes, no weights downloaded). Returns ranked plans."""
+    if not getattr(args, "offline", False):
+        discover.refresh_if_stale()
     plans = planner.candidates(nodes[0].hw, nodes[0].gbps, task=args.task, min_tps=args.min_tps,
                                min_quant=_min_quant(args), kv=args.kv, workers=nodes[1:])
     if not plans:
@@ -142,17 +147,27 @@ def cmd_bench(args):
 def cmd_models(args):
     if args.update:
         try:
-            n = catalog.update()
-            print(f"Catalog updated: {n} models.")
+            print(f"Hand-scored catalog updated: {catalog.update()} models.")
         except Exception as e:
-            sys.exit(f"Could not update catalog ({e}). Private repo? set GITHUB_TOKEN or TLAV_CATALOG_URL.")
+            print(f"Hand-scored catalog not updated ({str(e)[:60]}); using the built-in one.")
+        print("Searching Hugging Face for new original models from trusted publishers...")
+        try:
+            found = discover.update()
+        except Exception as e:
+            sys.exit(f"Could not reach Hugging Face ({e}).")
+        print(f"{len(found)} more models are now part of every search. `tlav models` lists them all.")
         return
     print(f"{'ID':<22}{'Name':<28}{'Params':>8}  Q4_K_M size  Tags")
     q4 = catalog.QUANT_BY_NAME["Q4_K_M"]
-    for m in catalog.load():
+    models = catalog.load()
+    for m in sorted(models, key=lambda m: (m.estimated, m.params_b)):
         size = f"{m.params_b:.1f}B" + ("*" if m.is_moe else "")
-        print(f"{m.id:<22}{m.name:<28}{size:>8}  {m.weights_gb(q4):>8.1f} GB  {', '.join(m.tags)}")
+        src = "  (found on Hugging Face)" if m.estimated else ""
+        print(f"{m.id[:21]:<22}{m.name[:27]:<28}{size:>8}  {m.weights_gb(q4):>8.1f} GB  {', '.join(m.tags)}{src}")
     print("\n* mixture-of-experts: reads only a few billion parameters per token, so it runs fast.")
+    age = discover.age_days()
+    print(f"{sum(m.estimated for m in models)} models found on Hugging Face "
+          + (f"{age:.0f} days ago" if age is not None else "(none yet)") + "; `tlav models --update` refreshes.")
     print("Not listed? `tlav search <name>` finds any GGUF model on Hugging Face.")
     print("\nCompression levels:")
     for q in catalog.QUANTS:
@@ -255,10 +270,21 @@ def _resolve_plan(args, nodes):
     _print_plans(plans, 3)
     print(f"\n  Best for this {'cluster' if plans[0].is_cluster else 'PC'}: {plans[0].label}")
     print(f"  why: {finder.why(plans[0], plans[1] if len(plans) > 1 else None, args.min_tps)}")
+    _custom_tip(plans[0], args)
     return plans[0], None
 
 
-def _obtain_model(plan, hw, local_compress: bool, files: Optional[dict] = None) -> Path:
+def _obtain_model(plan, hw, local_compress: bool, files: Optional[dict] = None, custom: bool = False,
+                  min_tps: float = 0.0) -> Path:
+    if custom and not plan.is_cluster:
+        fit = planner.fit_target(plan.model, plan.nodes[0], plan.kv, min_tps=min_tps)
+        if fit:
+            src = compress.fetch_source(plan.model)
+            res = compress.compress_to_size(src, fit[0], hw.physical_cores)
+            plan.quant = catalog.quant_from_file(int(res["size_gb"] * 1024 ** 3), plan.model.params_b, "FIT")
+            plan.ctx = fit[1]
+            return Path(res["path"])
+        print("  (no room for an exact-fit build; using a ready-made file)")
     if files:  # --hf repo
         fn = files[plan.quant.name]
         print(f"Downloading {fn} ...")
@@ -266,11 +292,27 @@ def _obtain_model(plan, hw, local_compress: bool, files: Optional[dict] = None) 
     names = hub.list_files(plan.model.repo)
     ready = hub.find_quant_file(names, plan.quant.name)
     if ready and not local_compress:
-        print(f"Downloading pre-compressed {ready} ...")
+        have = (config.models_dir() / ready).exists()
+        print(f"{'Using the downloaded' if have else 'Downloading pre-compressed'} {ready} ...")
         return hub.download(plan.model.repo, ready)
     src = compress.fetch_source(plan.model)
     res = compress.compress(src, plan.quant.name, hw.physical_cores, verify=True)
     return Path(res["path"])
+
+
+def _custom_tip(plan, args):
+    """Tell the user when an exact-fit build would use clearly more of their RAM."""
+    if getattr(args, "custom", False) or plan.is_cluster:
+        return
+    fit = planner.fit_target(plan.model, plan.nodes[0], plan.kv, min_tps=args.min_tps)
+    weights = plan.model.weights_gb(plan.quant)
+    if fit and fit[0] > weights * 1.12:
+        bpw = fit[0] * 8 * 1024 ** 3 / (plan.model.params_b * 1e9)
+        q = catalog.Quant("FIT", bpw, catalog.retention_for("", bpw), "")
+        tps = planner.estimate_tps(plan.model, q, plan.nodes[0].gbps, plan.nodes[0].hw)
+        print(f"  tip: `tlav setup --custom` builds a {fit[0]:.1f} GB version of {plan.model.name} sized exactly for "
+              f"this PC ({bpw:.1f} bits/weight vs {plan.quant.bpw:.1f}, ~{tps:.1f} tokens/s); it downloads the "
+              f"original weights first.")
 
 
 def _obtain_draft(plan) -> Optional[Path]:
@@ -313,7 +355,7 @@ def cmd_setup(args):
         if note:
             print("  " + note)
         runtime.install(hw)
-    path = _obtain_model(plan, hw, args.local_compress, files)
+    path = _obtain_model(plan, hw, args.local_compress, files, custom=args.custom, min_tps=args.min_tps)
     draft = _obtain_draft(plan)
     if args.kv_check and plan.kv != "f16":
         print("  Checking that the compressed context cache keeps quality...")
@@ -597,7 +639,9 @@ def cmd_compress(args):
             print(f"Least compression that fits this machine: {target} (~{plan.memory_gb:.1f} GB)")
     else:
         model = catalog.get(args.model)
-        if args.fit or not args.to:
+        if args.exact or args.size:
+            target = None
+        elif args.fit or not args.to:
             plan = planner.best_quant_for(model, hw, benchmark.cached_or_run()["effective_gbps"])
             if not plan:
                 sys.exit(f"{model.name} does not fit this machine even at Q3_K_M.")
@@ -606,6 +650,16 @@ def cmd_compress(args):
         else:
             target = args.to
         src = compress.fetch_source(model)
+    if args.exact or args.size:
+        node = planner.Node(hw, benchmark.cached_or_run()["effective_gbps"])
+        m = gguf.read(str(src)).to_model(src.stem) if args.file else model
+        fit = (args.size, None) if args.size else planner.fit_target(m, node, min_tps=2.5)
+        if not fit:
+            sys.exit("Not enough RAM for this model even at ~4 bits per weight. Try a cluster.")
+        res = compress.compress_to_size(src, fit[0], hw.physical_cores, use_imatrix=not args.no_imatrix,
+                                        verify=not args.no_verify)
+        print(json.dumps(res, indent=2))
+        return
     res = compress.compress(src, target, hw.physical_cores, verify=not args.no_verify,
                             tolerance_pct=args.tolerance, use_imatrix=not args.no_imatrix)
     if args.kv_check:
@@ -697,6 +751,8 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--local-compress", action="store_true",
                    help="compress on this machine instead of downloading a pre-compressed file")
     s.add_argument("--kv-check", action="store_true", help="measure the context-cache quality impact first")
+    s.add_argument("--custom", action="store_true",
+                   help="build a file sized exactly for this PC from the original weights (best quality, big download)")
     s.add_argument("--skip-bench", action="store_true")
     s.add_argument("--yes", "-y", action="store_true")
     s.add_argument("--no-run", action="store_true")
@@ -710,6 +766,9 @@ def build_parser() -> argparse.ArgumentParser:
     srcg.add_argument("--file", help="your own .gguf file (F16/BF16/Q8_0)")
     s.add_argument("--to", choices=[q.name for q in catalog.QUANTS[1:]])
     s.add_argument("--fit", action="store_true", help="pick the least compression that fits this machine")
+    s.add_argument("--exact", action="store_true",
+                   help="build a file sized exactly for this PC's RAM (precision chosen per tensor)")
+    s.add_argument("--size", type=float, help="build a file of exactly this many GB")
     s.add_argument("--no-verify", action="store_true")
     s.add_argument("--no-imatrix", action="store_true", help="skip importance-matrix compression")
     s.add_argument("--kv-check", action="store_true", help="also test a compressed context cache")

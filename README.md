@@ -132,17 +132,24 @@ If your network blocks discovery, add a worker by address: `tlav cluster add 192
 
 ---
 
-## Find any model
+## How Tlav finds the best model
+
+This is Tlav's core job, and it does it like a careful researcher would:
+
+1. **It knows what's new.** Every week (or on `tlav models --update`) Tlav scans Hugging Face for GGUF releases from trusted publishers (bartowski, unsloth, ggml-org, LM Studio). It keeps only **original models from real AI labs**, such as Qwen, Google, Meta, Mistral, Microsoft, NVIDIA and DeepSeek, by following each file's `base_model` link. Merges, role-play tunes, "uncensored" edits, vision/audio-only models and base (non-chat) versions are left out. On the last run: 61 candidates, 51 kept, in 28 seconds.
+2. **It reads the real files.** For every candidate it reads the GGUF header over the network: a few hundred KB, never the whole model. That gives exact parameters, layers, context-cache size, mixture-of-experts layout and whether the model can reason step by step.
+3. **It counts what actually costs speed.** On a CPU, speed is memory bandwidth ÷ bytes read per word. Tlav leaves out embedding tables (looked up, not read), which are up to a third of a small model. It also counts only the active experts of MoE models. Estimates moved closer to measured: Qwen3.5 9B was estimated at 3.1 tok/s and measured at 3.7 (the old estimate was 2.7).
+4. **It scores quality honestly.** About 30 well-known models carry hand-checked quality scores. For new models Tlav uses a formula learned from those scores: roughly +7 points for each doubling of size and +4 for each year newer. It reproduces the hand-checked scores within about 3.5 points on average. Estimated scores are marked `~` and lose ties to checked ones.
+5. **It checks the shortlist against reality.** The top 5 for your PC are re-planned with the **exact** download sizes of every compression level that exists (Q4_K_L, IQ4_XS, unsloth's dynamic files...). Real files differ: Qwen3.5 9B's Q4_K_M is 5.75 GB, not the 5.05 GB its parameter count suggests.
+6. **It explains the pick** and, after installing, measures the real speed once to calibrate future picks.
 
 ```bash
-tlav search qwen
-tlav search "llama 3.2" --task code
-tlav setup --hf bartowski/Qwen_Qwen3-8B-GGUF
+tlav recommend                     # ranked for this PC, with the why
+tlav recommend --ram 8             # what an 8 GB machine would get
+tlav models --update               # refresh the list from Hugging Face now
+tlav search "gemma 4"              # any GGUF on Hugging Face, judged for this PC
+tlav setup --hf unsloth/gemma-4-12b-it-GGUF
 ```
-
-Tlav searches Hugging Face, then reads each model's real architecture straight from its GGUF header. It downloads only a few MB per model, not the whole file, so it can tell how much RAM and speed **every** compression level of **any** model would need on your machine. It works with models newer than Tlav itself. `tlav models --update` refreshes the curated catalog.
-
----
 
 ## Less RAM, same quality
 
@@ -159,6 +166,25 @@ Everything below is **measured**, not assumed.
 
 Want zero noticeable loss? `tlav setup --max-quality` allows only Q6_K/Q8_0 (measured change under 0.5%).
 
+### Exact-fit compression
+
+Ready-made files come in fixed sizes, so a PC usually ends up with a file a bit smaller than it could hold. `tlav setup --custom` (or `tlav compress --model ID --exact`) downloads the original weights and builds a file **sized exactly for your RAM and your minimum speed**. llama.cpp chooses the precision of every tensor separately and uses Tlav's importance matrix, so the most sensitive weights get the most bits.
+
+Measured on Qwen2.5 0.5B against the original:
+
+| File | Size | KL divergence (lower = closer) | Same next word as the original |
+|---|---|---|---|
+| Q4_K_M, standard | 398 MB | 0.0284 | not measured |
+| Q4_K_M, importance matrix (Tlav keeps this one) | 398 MB | 0.0226 | 91.1% |
+| **Exact fit, 0.42 GB** | **414 MB** | **0.0072** | **94.3%** |
+| Q8_0 | 507 MB | 0.0022 | 98.0% |
+
+For 4% more size, the exact fit is about 3× closer to the original than the best Q4_K_M.
+
+### How quality is checked
+
+Every compression Tlav does is compared with the original using **KL divergence**, the standard measure of quantization damage (0 = identical). Tlav also reports **how often the compressed model picks the same next word**, and the perplexity change. Standard and importance-matrix versions are both built, and the one closer to the original is kept. Anything over the tolerance is rejected, and Tlav steps up a level.
+
 A bigger model compressed to Q4_K_M almost always beats a smaller model kept at full precision. That trade is what lets Tlav run "a larger, better model" on your machine.
 
 ---
@@ -174,8 +200,9 @@ A bigger model compressed to Q4_K_M almost always beats a smaller model kept at 
 | `tlav bench [--real]` | Bandwidth benchmark; `--real` measures true tok/s and calibrates future estimates |
 | `tlav recommend` | Ranked models (`--cluster`, `--task code`, `--ram 16 --ram 8` to simulate) |
 | `tlav search QUERY` | Find GGUF models on Hugging Face that fit this machine or cluster |
-| `tlav models [--update]` | Curated catalog and compression levels |
+| `tlav models [--update]` | All known models (hand-checked + found on Hugging Face); `--update` scans for new releases |
 | `tlav compress --model ID --fit` | Compress as little as possible to fit, verify quality |
+| `tlav compress --model ID --exact` / `--size 5.2` | Build a file sized exactly for this PC / to a size, precision chosen per tensor |
 | `tlav compress --file X-f16.gguf --to Q4_K_M --kv-check` | Compress your own model |
 | `tlav run [--detach] [--host 0.0.0.0]` | Start the server + web chat (0.0.0.0 = usable from phones/other PCs) |
 | `tlav status` / `tlav stop` | What's running and how much memory it really uses / stop it |
