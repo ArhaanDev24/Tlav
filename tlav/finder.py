@@ -24,10 +24,20 @@ class Found:
     info: Optional[gguf.GGUFInfo] = None
     plan: Optional[planner.Plan] = None
     error: str = ""
+    created: str = ""                     # YYYY-MM, sharpens the quality estimate
 
     @property
     def model(self) -> Optional[catalog.Model]:
-        return _named(self.info.to_model(self.repo.split("/")[-1].lower(), self.repo), self.repo) if self.info else None
+        if not self.info:
+            return None
+        import dataclasses
+        m = _named(self.info.to_model(self.repo.split("/")[-1].lower(), self.repo), self.repo)
+        if self.created:
+            moe = self.info.expert_count
+            q = catalog.estimate_quality(m.active_params_b if moe else m.params_b,
+                                         moe_total_b=m.params_b if moe else None, released=self.created)
+            m = dataclasses.replace(m, quality={"chat": q, "code": q - 3}, released=self.created, estimated=True)
+        return m
 
 
 def _named(model: catalog.Model, repo: str) -> catalog.Model:
@@ -71,8 +81,8 @@ def parse_tree(tree: list) -> Dict[str, tuple]:
 
 
 def inspect(repo: str, nodes: List[planner.Node], task: str = "chat", min_tps: float = 2.5,
-            min_quant: str = catalog.DEFAULT_MIN_QUANT) -> Found:
-    f = Found(repo, 0, 0, {})
+            min_quant: str = catalog.DEFAULT_MIN_QUANT, created: str = "") -> Found:
+    f = Found(repo, 0, 0, {}, created=created)
     try:
         files = repo_files(repo)
         f.files = {q: s for q, (_, s) in files.items()}
@@ -93,7 +103,8 @@ def search(query: str, nodes: List[planner.Node], limit: int = 10, **kw) -> List
     repos = [r for r in search_repos(query, limit=limit * 2)
              if r.get("pipeline_tag") in TEXT_PIPELINES][:limit]
     with ThreadPoolExecutor(max_workers=6) as ex:
-        results = list(ex.map(lambda r: inspect(r["id"], nodes, **kw), repos))
+        results = list(ex.map(lambda r: inspect(r["id"], nodes, created=(r.get("createdAt") or "")[:7], **kw),
+                              repos))
     for r, meta in zip(results, repos):
         r.downloads, r.likes = meta.get("downloads", 0), meta.get("likes", 0)
     # fitting models first, then by quality estimate, then popularity
@@ -138,7 +149,7 @@ def refine(plans: List[planner.Plan], nodes: List[planner.Node], task: str = "ch
         except Exception as e:  # offline, renamed repo, rate limit
             return Checked(None, p, f"could not check ({str(e)[:40]})")
         quants = [catalog.quant_from_file(size, p.model.params_b, q)
-                  for q, (_, size) in files.items() if q in catalog.QUANT_BY_NAME]
+                  for q, (_, size) in files.items() if catalog.retention_for(q) is not None]
         if not quants:
             return Checked(None, p, "no ready-made files")
         real = planner.plan_for_model(p.model, nodes, task, min_tps, min_quant, kv, quants)

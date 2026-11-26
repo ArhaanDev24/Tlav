@@ -1,4 +1,7 @@
 import os
+import sys
 import tempfile
 
-os.environ.setdefault("TLAV_HOME", tempfile.mkdtemp(prefix="tlav-test-"))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+# Tests never touch the real ~/.tlav (state, discovered models, saved chats).
+os.environ["TLAV_HOME"] = tempfile.mkdtemp(prefix="tlav-test-")
