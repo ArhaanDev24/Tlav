@@ -155,13 +155,27 @@ def scan(timeout: float = 2.0, token: Optional[str] = None, port: int = DISCOVER
             continue
         msg = parse(data)
         if msg and msg.get("type") == "worker":
-            host = msg.get("rpc_host") or addr[0]
-            if host in ("0.0.0.0", "127.0.0.1") and addr[0] != "127.0.0.1":
-                host = addr[0]
-            msg["endpoint"] = f"{host}:{msg.get('rpc_port', RPC_PORT)}"
-            found[msg["endpoint"]] = msg
+            port_ = msg.get("rpc_port", RPC_PORT)
+            # The address the reply came from and the one the worker advertises can differ
+            # (several network cards, VPNs, a worker bound to localhost). Keep both; the
+            # caller uses whichever one actually answers.
+            hosts = [h for h in dict.fromkeys([msg.get("rpc_host"), addr[0]]) if h and h != "0.0.0.0"]
+            msg["candidates"] = [f"{h}:{port_}" for h in hosts]
+            msg["endpoint"] = msg["candidates"][0] if msg["candidates"] else f"{addr[0]}:{port_}"
+            if not any(e in found for e in msg["candidates"]):
+                found[msg["endpoint"]] = msg
     sock.close()
     return list(found.values())
+
+
+def reachable(worker: dict) -> Optional[float]:
+    """Ping the worker's candidate addresses; keep the first that answers as its endpoint."""
+    for e in worker.get("candidates") or [worker["endpoint"]]:
+        lat = ping(e)
+        if lat is not None:
+            worker["endpoint"] = e
+            return lat
+    return None
 
 
 def ping(endpoint: str, tries: int = 3, timeout: float = 2.0) -> Optional[float]:
@@ -194,12 +208,12 @@ def add_worker(address: str, token: Optional[str] = None, port: int = DISCOVERY_
     replies = scan(timeout=2.0, token=token, port=port, targets=[host])
     if replies:
         w = replies[0]
-        if rpc_port:
-            w["endpoint"] = f"{host}:{rpc_port}"
+        w["candidates"] = [f"{host}:{rpc_port or w.get('rpc_port', RPC_PORT)}"] + w.get("candidates", [])
     else:
         # discovery blocked by a firewall: accept a bare rpc endpoint with unknown hardware
         w = {"hostname": host, "endpoint": f"{host}:{rpc_port or RPC_PORT}", "hardware": None, "gbps": None}
-    lat = ping(w["endpoint"])
+    lat = reachable(w)
+    w.pop("candidates", None)
     if lat is None:
         raise ConnectionError(f"Cannot reach rpc-server at {w['endpoint']}. Is `tlav worker` running there?")
     w["latency_ms"] = round(lat, 2)
