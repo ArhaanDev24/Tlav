@@ -36,7 +36,7 @@
 [hidden] { display: none !important; }
 html { scroll-behavior: smooth; background: var(--ink); }
 body { background: var(--ink); color: var(--text); font: 400 16px/1.6 var(--body); -webkit-font-smoothing: antialiased; overflow-x: clip; }
-body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 60; background: var(--ink); }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 60; background: var(--volt); }
 a { color: inherit; }
 h1, h2, h3 { font-family: var(--display); font-weight: 600; letter-spacing: -0.045em; line-height: 0.98; margin: 0; text-wrap: balance; }
 p { margin: 0; }
@@ -76,28 +76,16 @@ p { margin: 0; }
 .copy { flex: none; padding: 6px 10px; border-radius: 7px; border: 1px solid var(--line); background: transparent; color: var(--text); font: 500 12px var(--body); cursor: pointer; }
 .copy:hover { background: rgba(255, 255, 255, 0.07); }
 
-/* ---------- hero ---------- */
-.hero { --p: 0; position: relative; min-height: clamp(700px, 100svh, 980px); overflow: hidden; display: flex; flex-direction: column;
-  background: linear-gradient(180deg, #000 0%, #050a18 22%, #14234a 52%, #4a5f8f 74%, var(--haze) 92%, #b9c5df 100%); }
-.hero-copy { position: relative; z-index: 2; text-align: center; padding-top: clamp(112px, 15vh, 150px); opacity: calc(1 - var(--p) * 1.6); transform: translateY(calc(var(--p) * -40px)); }
-.hero h1 { font-size: clamp(46px, 7.4vw, 96px); font-weight: 600; }
-.hero .sub { margin: 18px auto 0; max-width: 30ch; font-size: clamp(16px, 1.6vw, 20px); line-height: 1.45; color: #a9b6d2; }
-.stage { position: relative; flex: 1; min-height: 360px; margin-top: clamp(10px, 3vh, 40px); }
-.devices { position: absolute; left: 50%; bottom: clamp(104px, 13vh, 130px); width: max(980px, 104vw); height: auto; transform: translateX(-50%) translateY(calc(var(--p) * -50px)) scale(calc(1 + var(--p) * 0.07)); transform-origin: 50% 70%; filter: drop-shadow(0 0 18px rgba(150, 190, 255, 0.45)); }
-.core-halo { transform-box: fill-box; transform-origin: center; animation: pulse 3.2s ease-in-out infinite; }
-.core-ray { opacity: calc(0.55 + var(--p) * 0.6); }
-@keyframes pulse { 0%, 100% { transform: scale(1); opacity: .9; } 50% { transform: scale(1.18); opacity: 1; } }
-.labels { position: absolute; left: 50%; bottom: clamp(26px, 5vh, 56px); transform: translateX(-50%); display: grid; justify-items: center; gap: 3px; text-align: center; font-size: 14px; color: #1b2748; white-space: nowrap; }
-.labels span:nth-child(1) { color: #0f1a36; font-weight: 500; }
-.labels span:nth-child(2) { color: rgba(25, 38, 72, 0.7); }
-.labels span:nth-child(3) { color: rgba(25, 38, 72, 0.42); }
-.hero-foot { position: absolute; z-index: 3; left: 0; right: 0; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); display: flex; justify-content: space-between; align-items: center; font-size: 13px; color: rgba(20, 32, 64, 0.75); }
-.hero-foot .tag { display: inline-flex; align-items: center; gap: 8px; }
-.hero-foot .tag b { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 4px; background: #fff; color: #1a2442; font: 600 11px var(--mono); }
-.hero-foot a { text-decoration: none; display: inline-flex; gap: 6px; align-items: center; }
-
 /* ---------- kinetic type wall ---------- */
-.wall { --p: 0; background: var(--volt); overflow: hidden; padding-block: clamp(18px, 3vw, 36px); }
+.wall { --p: 0; position: relative; background: var(--volt); overflow: hidden;
+  margin-top: calc(-1 * env(safe-area-inset-top, 0px)); padding-top: calc(env(safe-area-inset-top, 0px) + clamp(96px, 13vh, 130px)); padding-bottom: clamp(18px, 3vw, 36px); }
+.intro { position: relative; z-index: 2; display: grid; gap: 18px; justify-items: start; padding-bottom: clamp(28px, 5vw, 56px); }
+.intro h1 { font-size: clamp(56px, 11vw, 168px); line-height: .9; letter-spacing: -0.065em; color: #fff; }
+.intro .sub { max-width: 34ch; font-size: clamp(17px, 1.7vw, 21px); line-height: 1.45; color: rgba(255, 255, 255, 0.82); }
+.intro .btns { margin-top: 6px; }
+.intro .btn.ghost { border-color: rgba(255, 255, 255, 0.4); color: #fff; }
+.intro .tag { font: 500 12px/1 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: rgba(255, 255, 255, 0.7); }
+.wall .rows { opacity: .28; }
 .wall .row { font: 600 clamp(52px, 10.4vw, 156px)/0.93 var(--display); letter-spacing: -0.065em; color: #fff; white-space: nowrap; will-change: transform; }
 .wall .row:nth-child(odd) { transform: translateX(calc(-4% - var(--p) * 22%)); }
 .wall .row:nth-child(even) { transform: translateX(calc(-26% + var(--p) * 22%)); }
@@ -210,15 +198,11 @@ footer .wrap { display: flex; flex-wrap: wrap; gap: 12px 24px; justify-content: 
   .nav-inner { width: 100%; justify-content: space-between; }
   .cluster-facts { grid-template-columns: minmax(0, 1fr); }
   .stat, .stat.wide { grid-column: span 12; }
-  .labels { font-size: 13px; }
-  .hero-foot .scroll-txt { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
   *, *::before, *::after { animation: none !important; transition: none !important; }
   .wall .row:nth-child(odd), .wall .row:nth-child(even) { transform: translateX(-8%); }
-  .devices { transform: translateX(-50%); }
-  .hero-copy { opacity: 1; transform: none; }
 }
 </style>
 
@@ -336,37 +320,18 @@ footer .wrap { display: flex; flex-wrap: wrap; gap: 12px 24px; justify-content: 
 </div>
 
 <main id="top">
-  <!-- HERO -->
-  <section class="hero" id="hero" aria-labelledby="hero-title">
-    <div class="hero-copy wrap">
-      <h1 id="hero-title">Old PCs.<br>New minds.</h1>
-      <p class="sub">Tlav turns the computers you already own into private AI workstations.</p>
-    </div>
-    <div class="stage" aria-hidden="true">
-      <svg class="devices" viewBox="0 0 1800 440" preserveAspectRatio="xMidYMax meet">
-        <ellipse cx="900" cy="432" rx="900" ry="14" fill="#cfe0ff" opacity=".25" filter="url(#softGlow)"/>
-        <use href="#tower" x="-70" y="96" width="165" height="330"/>
-        <use href="#laptop" x="150" y="142" width="483" height="282"/>
-        <use href="#imac" x="680" y="30" width="440" height="396"/>
-        <use href="#laptop" x="1167" y="142" width="483" height="282"/>
-        <use href="#tower" x="1705" y="96" width="165" height="330"/>
-        <!-- AI core inside the iMac -->
-        <line class="core-ray" x1="900" y1="188" x2="900" y2="440" stroke="url(#ray)" stroke-width="2"/>
-        <circle class="core-halo" cx="900" cy="166" r="86" fill="url(#coreGrad)"/>
-        <circle cx="900" cy="166" r="22" fill="#fffaf2"/>
-        <line x1="900" y1="188" x2="900" y2="440" stroke="#ffffff" stroke-opacity=".7" stroke-width="1"/>
-      </svg>
-      <div class="labels"><span>Your private AI</span><span>No cloud. No subscription.</span><span>Runs on 8 GB of RAM</span></div>
-    </div>
-    <div class="hero-foot wrap">
-      <span class="tag"><b>&lt;/&gt;</b> Open source · Runs 100% offline</span>
-      <a href="#wall"><span class="scroll-txt">Scroll down</span>
-        <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 4l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6"/></svg></a>
-    </div>
-  </section>
-
   <!-- KINETIC TYPE WALL -->
-  <section class="wall" id="wall" aria-label="Your old PC can think">
+  <section class="wall" id="wall" aria-labelledby="hero-title">
+    <div class="intro wrap">
+      <span class="tag">Open source · Runs 100% offline</span>
+      <h1 id="hero-title">Old PCs.<br>New minds.</h1>
+      <p class="sub">Tlav turns the computers you already own into private AI workstations. No cloud, no subscription, runs on 8 GB of RAM.</p>
+      <div class="btns">
+        <a class="btn light" href="#install">Get Tlav</a>
+        <a class="btn ghost" href="#how">How it works</a>
+      </div>
+    </div>
+    <div class="rows" aria-hidden="true">
     <div class="row" aria-hidden="true">your old pc can think · your old pc can think · your old pc can think</div>
     <div class="row" aria-hidden="true">your old pc can think · your old pc can think · your old pc can think</div>
     <div class="row" aria-hidden="true">your old pc <em>can think</em> · your old pc can think · your old pc can think</div>
@@ -375,7 +340,7 @@ footer .wrap { display: flex; flex-wrap: wrap; gap: 12px 24px; justify-content: 
     <div class="row" aria-hidden="true">your old pc can think · your old pc can think · your old pc can think</div>
     <div class="row" aria-hidden="true">your old pc can think · your old pc can think · your old pc can think</div>
     <div class="row" aria-hidden="true">your old pc <em>can think</em> · your old pc can think · your old pc can think</div>
-    <p class="sr">Your old PC can think.</p>
+    </div>
   </section>
 
   <!-- HOW IT WORKS -->
@@ -608,7 +573,6 @@ footer .wrap { display: flex; flex-wrap: wrap; gap: 12px 24px; justify-content: 
   lightCells(1);
 
   /* ---- scroll-linked progress ---- */
-  const hero = document.getElementById("hero");
   const wall = document.getElementById("wall");
   const cluster = document.getElementById("cluster");
   const clamp = (v) => Math.max(0, Math.min(1, v));
@@ -616,7 +580,6 @@ footer .wrap { display: flex; flex-wrap: wrap; gap: 12px 24px; justify-content: 
   const onScroll = () => {
     ticking = false;
     const vh = innerHeight;
-    hero.style.setProperty("--p", clamp(scrollY / hero.offsetHeight).toFixed(4));
     const w = wall.getBoundingClientRect();
     wall.style.setProperty("--p", clamp((vh - w.top) / (vh + w.height)).toFixed(4));
     const c = cluster.getBoundingClientRect();
