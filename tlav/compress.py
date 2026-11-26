@@ -29,8 +29,12 @@ def quantize(src: Path, quant: str, threads: int, out: Optional[Path] = None) ->
     if not re.search(r"[-.](f16|bf16|f32)$", src.stem, re.I):
         cmd.append("--allow-requantize")  # source already quantized (e.g. Q8_0)
     cmd += [str(src), str(out), quant, str(threads)]
-    print("Compressing:", " ".join(cmd))
-    subprocess.check_call(cmd)
+    log = config.home() / "compress.log"
+    print(f"Compressing {src.name} -> {out.name} (details in {log}) ...")
+    with open(log, "a") as f:
+        res = subprocess.run(cmd, stdout=f, stderr=subprocess.STDOUT)
+    if res.returncode != 0:
+        raise RuntimeError(f"llama-quantize failed; see {log}")
     return out
 
 

@@ -2,7 +2,7 @@
 # Tlav installer for macOS and Linux. Creates ~/.tlav/venv and links `tlav` into ~/.local/bin.
 set -euo pipefail
 
-REPO_URL="${TLAV_REPO:-https://github.com/arhaankhan/Tlav}"
+REPO_URL="${TLAV_REPO:-https://github.com/OWNER/Tlav}"
 TLAV_HOME="${TLAV_HOME:-$HOME/.tlav}"
 BIN_DIR="$HOME/.local/bin"
 
