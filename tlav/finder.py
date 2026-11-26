@@ -111,3 +111,48 @@ def model_from_repo(repo: str) -> tuple:
     info = gguf.read_remote(repo, smallest)
     model = _named(info.to_model(repo.split("/")[-1].lower(), repo), repo)
     return model, {q: fn for q, (fn, _) in files.items()}
+
+
+# ------------------------------------------------------------------ refine catalog picks with real files
+
+@dataclass
+class Checked:
+    plan: Optional[planner.Plan]          # re-planned with the real file sizes (None: dropped)
+    estimate: planner.Plan                # the plan made from Tlav's size estimates
+    note: str = ""                        # why it was dropped, if it was
+
+
+def refine(plans: List[planner.Plan], nodes: List[planner.Node], task: str = "chat", min_tps: float = 2.5,
+           min_quant: str = catalog.DEFAULT_MIN_QUANT, kv: str = planner.DEFAULT_KV,
+           lister=None) -> List[Checked]:
+    """Re-check shortlisted catalog models against the files that really exist on Hugging Face.
+
+    Only the repository's file list is fetched (a few KB per model), so the
+    pick uses exact download sizes without downloading any weights.
+    """
+    lister = lister or repo_files
+
+    def one(p: planner.Plan) -> Checked:
+        try:
+            files = lister(p.model.repo)
+        except Exception as e:  # offline, renamed repo, rate limit
+            return Checked(None, p, f"could not check ({str(e)[:40]})")
+        quants = [catalog.quant_from_file(size, p.model.params_b, q)
+                  for q, (_, size) in files.items() if q in catalog.QUANT_BY_NAME]
+        if not quants:
+            return Checked(None, p, "no ready-made files")
+        real = planner.plan_for_model(p.model, nodes, task, min_tps, min_quant, kv, quants)
+        return Checked(real, p, "" if real else "real files are too big or too slow here")
+
+    with ThreadPoolExecutor(max_workers=6) as ex:
+        return list(ex.map(one, plans))
+
+
+def why(plan: planner.Plan, runner_up: Optional[planner.Plan], min_tps: float) -> str:
+    """One plain sentence on why this model won."""
+    where = f"{len(plan.nodes)} computers" if plan.is_cluster else "this PC"
+    s = (f"highest quality that fits {where} at ≥{min_tps:g} tokens/s; "
+         f"{plan.quant.name} keeps ~{plan.quant.retention * 100:.1f}% of the original")
+    if runner_up and round(runner_up.quality) == round(plan.quality):
+        s += f"; as good as {runner_up.model.name} but faster"
+    return s

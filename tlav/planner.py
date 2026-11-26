@@ -181,7 +181,14 @@ def _quants_for(min_quant: str, quants: Optional[List[Quant]] = None) -> List[Qu
     """
     floor = catalog.QUANT_BY_NAME[min_quant].bpw - 0.3
     if quants is not None:
-        return sorted((q for q in quants if q.bpw >= floor and q.bpw < 12), key=lambda q: -q.bpw)
+        # Standard levels are judged by name (real files of hybrid/odd models can be smaller
+        # than the nominal bits/weight); unknown ones (IQ4_XS, Q4_K_L...) by their real size.
+        rank = {q.name: i for i, q in enumerate(catalog.QUANTS)}
+        def allowed(q):
+            if q.name in rank:
+                return rank[q.name] <= rank[min_quant] and q.name not in ("F16", "BF16")
+            return floor <= q.bpw < 12
+        return sorted((q for q in quants if allowed(q)), key=lambda q: -q.bpw)
     return [q for q in catalog.quants_down_to(min_quant) if q.name != "F16"]  # F16 never pays off on CPU
 
 
@@ -245,8 +252,22 @@ def candidates(hw: Hardware, effective_gbps: float, task: str = "chat", min_tps:
         if plan:
             plans.append(plan)
     # quality first; prefer faster when quality is within 1 point
-    plans.sort(key=lambda p: (round(p.quality), p.est_tps), reverse=True)
-    return plans
+    return rank(plans)
+
+
+def shortlist(plans: List[Plan], n: int = 5) -> List[Plan]:
+    """The top `n` models (one plan per model, already sorted best first)."""
+    seen, out = set(), []
+    for p in plans:
+        if p.model.id not in seen:
+            seen.add(p.model.id)
+            out.append(p)
+    return out[:n]
+
+
+def rank(plans: List[Plan]) -> List[Plan]:
+    """Quality first; prefer faster when quality is within 1 point, then more free RAM."""
+    return sorted(plans, key=lambda p: (round(p.quality), p.est_tps, -p.memory_gb), reverse=True)
 
 
 def best(hw: Hardware, effective_gbps: float, **kw) -> Optional[Plan]:
