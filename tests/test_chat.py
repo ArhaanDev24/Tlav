@@ -47,3 +47,25 @@ def test_save_and_load(tmp_path, monkeypatch):
 def test_think_default_follows_speed():
     assert chat.Chat("u", {"est_tps": 2.7}).think is False
     assert chat.Chat("u", {"est_tps": 20}).think is True
+
+
+def test_mark_cursor_circles_and_cleans_up(capsys):
+    import time
+    m = chat.Mark(enabled=True, interval=0.01)
+    m.start("  ")
+    m.write("Hello")
+    time.sleep(0.06)
+    m.stop()
+    m.stop()  # second stop does nothing
+    out = capsys.readouterr().out
+    assert "Hello" in out and out.endswith("\b \b")
+    assert sum(out.count(f) for f in chat.Mark.FRAMES) >= 4   # it moved
+    assert out.count("\b \b") == 2                           # one before the text, one at the end
+
+
+def test_mark_off_writes_plain_text(capsys):
+    m = chat.Mark(enabled=False)
+    m.start("  ")
+    m.write("Hi")
+    m.stop()
+    assert capsys.readouterr().out == "  Hi"

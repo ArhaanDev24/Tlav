@@ -52,6 +52,60 @@ HELP = """\
 CHARS_PER_TOKEN = 3.5
 
 
+class Mark:
+    """The Tlav square as a writing cursor: its orange corner circles while the model writes.
+
+    The logo is a dark square with an orange top-right quarter; here that quarter moves
+    corner to corner (top-right, bottom-right, bottom-left, top-left) after the last
+    character, like a pen. Only on real terminals; plain output stays plain.
+    """
+    FRAMES = "▝▗▖▘"
+
+    def __init__(self, enabled: bool = _COLOR, interval: float = 0.14):
+        import threading
+        self.on = enabled
+        self.interval = interval
+        self.lock = threading.Lock()
+        self.i = 0
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._run, daemon=True) if enabled else None
+
+    def _frame(self) -> str:
+        return accent(self.FRAMES[self.i % 4])
+
+    def _run(self):
+        while not self._stop.wait(self.interval):
+            with self.lock:
+                self.i += 1
+                sys.stdout.write("\b" + self._frame())
+                sys.stdout.flush()
+
+    def start(self, prefix: str = "") -> None:
+        sys.stdout.write(prefix + (self._frame() if self.on else ""))
+        sys.stdout.flush()
+        if self._thread:
+            self._thread.start()
+
+    def write(self, text: str) -> None:
+        if not self.on:
+            sys.stdout.write(text)
+            sys.stdout.flush()
+            return
+        with self.lock:
+            sys.stdout.write("\b \b" + text + self._frame())
+            sys.stdout.flush()
+
+    def stop(self) -> None:
+        if not self.on or self._stop.is_set():
+            return
+        self._stop.set()
+        if self._thread and self._thread.is_alive():
+            self._thread.join(timeout=1)
+        with self.lock:
+            sys.stdout.write("\b \b")
+            sys.stdout.flush()
+
+
 # ------------------------------------------------------------------ pure helpers (unit tested)
 
 def estimate_tokens(messages: List[dict]) -> int:
@@ -239,32 +293,32 @@ class Chat:
         prompt, dropped = trim_history(self.messages, self.ctx, self.max_tokens)
         if dropped:
             print(dim(f"  (oldest {dropped} messages left out so the model has room to answer)"))
-        state = {"kind": None, "col": 0}
+        state = {"kind": None}
+        mark = Mark()
 
         def on_text(kind, chunk):
             if kind == "think" and not self.think:
                 return
             if kind != state["kind"]:
                 if state["kind"] is not None:
-                    sys.stdout.write("\n\n" if state["kind"] == "think" else "\n")
-                elif _COLOR:
-                    sys.stdout.write("\r\033[K")
-                sys.stdout.write(dim("  thinking · ") if kind == "think" else "  ")
+                    mark.write("\n\n  " if state["kind"] == "think" else "\n  ")
+                if kind == "think":
+                    mark.write(dim("thinking · "))
                 state["kind"] = kind
             out = chunk.replace("\n", "\n  ")
-            sys.stdout.write(dim(out) if kind == "think" else out)
-            sys.stdout.flush()
+            mark.write(dim(out) if kind == "think" else out)
 
-        if _COLOR:
-            sys.stdout.write(dim("  …") + "\r")
-            sys.stdout.flush()
+        mark.start("  ")   # the square circles from the moment you press Enter
         try:
             ans = stream(self.url, prompt, self.temperature, self.max_tokens,
                          self.think if self.reasons else None, on_text)
         except (urllib.error.URLError, ConnectionError, OSError) as e:
+            mark.stop()
             self.messages.pop()
             print(f"\n  The model stopped answering ({e}). Is it still running? Try `tlav status`.")
             return
+        finally:
+            mark.stop()
         print()
         if ans.text:
             self.messages.append({"role": "assistant", "content": ans.text})
