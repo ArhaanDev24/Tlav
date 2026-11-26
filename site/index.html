@@ -287,7 +287,8 @@ input[type=range]::-moz-range-thumb { width: 18px; height: 18px; background: var
 .js .num.pre .mem.half i { background: var(--sys); box-shadow: none; }
 
 /* ---------- install ---------- */
-.final { --ink: #eef3e8; --muted: #b8c8b2; --line: #3b5f46; background: var(--night); color: var(--ink); }
+.final { position: relative; isolation: isolate; overflow: hidden; background: #fbfcf9; }
+.ffield { position: absolute; inset: 0; z-index: -1; width: 100%; height: 100%; pointer-events: none; -webkit-mask-image: radial-gradient(110% 120% at 85% 55%, #000 25%, transparent 80%); mask-image: radial-gradient(110% 120% at 85% 55%, #000 25%, transparent 80%); }
 .final-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 24px; align-items: start; }
 .final-intro { grid-column: 1 / span 5; }
 .final h2 { font-size: clamp(44px, 6vw, 88px); line-height: .92; letter-spacing: -0.045em; max-width: 11ch; }
@@ -303,13 +304,13 @@ input[type=range]::-moz-range-thumb { width: 18px; height: 18px; background: var
 .isteps .n { grid-row: span 3; display: grid; place-items: center; width: 34px; height: 34px; background: var(--pixel); color: #1a2016; font: 700 16px var(--display); }
 .isteps b { font: 600 22px/1.2 var(--display); letter-spacing: -0.02em; }
 .isteps p { font-size: 15px; color: var(--muted); }
-.isteps p code { color: var(--ink); }
-.cmd { display: flex; align-items: center; gap: 12px; min-width: 0; margin-top: 10px; padding: 12px 12px 12px 16px; background: #183022; color: #eef3e8; }
+.isteps p code { color: var(--ink); background: var(--bg); padding: 1px 5px; }
+.cmd { display: flex; align-items: center; gap: 12px; min-width: 0; margin-top: 10px; padding: 12px 12px 12px 16px; background: var(--ink); color: #eef3e8; }
 .cmd code { flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; font-size: 14px; scrollbar-width: none; }
 .cmd code::before { content: "$ "; color: var(--pixel); }
 .copy { flex: none; padding: 7px 12px; border: 1px solid rgba(238, 243, 232, .3); background: transparent; color: #eef3e8; font: 500 13px var(--sans); cursor: pointer; transition: background-color .2s; }
 .copy:hover { background: rgba(238, 243, 232, .12); }
-footer { padding-block: 28px calc(28px + env(safe-area-inset-bottom, 0px)); background: var(--night); border-top: 1px solid #3b5f46; font-size: 14px; color: #b8c8b2; }
+footer { padding-block: 28px calc(28px + env(safe-area-inset-bottom, 0px)); background: #fbfcf9; border-top: 1px solid var(--line); font-size: 14px; color: var(--muted); }
 footer .wrap { display: flex; flex-wrap: wrap; gap: 12px 28px; justify-content: space-between; }
 footer a { text-decoration: none; }
 footer a:hover { color: var(--ink); }
@@ -554,6 +555,7 @@ footer a:hover { color: var(--ink); }
   </section>
 
   <section class="sec final" id="install" aria-labelledby="install-title">
+    <canvas class="ffield" id="ffield" aria-hidden="true"></canvas>
     <div class="wrap final-grid reveal">
       <div class="final-intro">
         <h2 id="install-title">Don't throw it out. Wake it up<span class="dot"></span></h2>
@@ -839,10 +841,40 @@ footer a:hover { color: var(--ink); }
   document.addEventListener("click", (e) => { if (!menu.hidden && !menu.contains(e.target)) closeMenu(); });
   menu.addEventListener("click", (e) => { if (e.target.tagName === "A") closeMenu(); });
 
+  /* closing section dots: still at rest, a sweep across when a command is copied */
+  const ff = $("ffield"), fgx = ff.getContext("2d");
+  let FWd = 0, FHd = 0, fdots = [], sweepT = -1;
+  const FGAP = 18;
+  const fsize = () => {
+    const r = ff.getBoundingClientRect(), dpr = Math.min(2, devicePixelRatio || 1);
+    FWd = r.width; FHd = r.height; ff.width = FWd * dpr; ff.height = FHd * dpr; fgx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    fdots = []; for (let y = FGAP / 2; y < FHd; y += FGAP) for (let x = FGAP / 2; x < FWd; x += FGAP) fdots.push({ x, y, j: (Math.sin(x * 12.9898 + y * 78.233) * 43758.5453) % 1 });
+  };
+  const FPAL = Array.from({ length: 17 }, (_, i) => mixHex("#aab79b", "#ff6d3a", i / 16));
+  const fdraw = (t) => {
+    fgx.clearRect(0, 0, FWd, FHd);
+    const front = sweepT < 0 ? -1e4 : (t - sweepT) / 1300 * (FWd + 300) - 150;
+    for (const c of fdots) {
+      const d = (c.x - front + Math.abs(c.j) * 40) / 70, k = sweepT < 0 ? 0 : Math.exp(-d * d);
+      const sz = 2.6 + k * 6.6;
+      fgx.globalAlpha = .75 + .25 * k; fgx.fillStyle = FPAL[Math.round(k * 16)];
+      fgx.fillRect(Math.round(c.x - sz / 2), Math.round(c.y - sz / 2), Math.round(sz), Math.round(sz));
+    }
+    fgx.globalAlpha = 1;
+  };
+  const fsweep = () => {
+    if (reduced) return;
+    sweepT = performance.now();
+    const step = (t) => { fdraw(t); if (t - sweepT < 1500) requestAnimationFrame(step); else { sweepT = -1; fdraw(t); } };
+    requestAnimationFrame(step);
+  };
+  fsize(); fdraw(0);
+  addEventListener("resize", () => { fsize(); fdraw(0); });
+
   /* copy */
   document.querySelectorAll(".copy").forEach((b) => b.addEventListener("click", () => {
     const code = b.parentElement.querySelector("code");
-    const done = (m) => { b.textContent = m; setTimeout(() => (b.textContent = "Copy"), 1600); };
+    const done = (m) => { b.textContent = m; setTimeout(() => (b.textContent = "Copy"), 1600); if (b.closest("#install")) fsweep(); };
     const fallback = () => { const r = document.createRange(); r.selectNodeContents(code); const s = getSelection(); s.removeAllRanges(); s.addRange(r); done("Selected"); };
     try { navigator.clipboard.writeText(code.textContent).then(() => done("Copied"), fallback); } catch (_) { fallback(); }
   }));
