@@ -7,15 +7,15 @@ A single self-contained page (`index.html`): CSS, a canvas pixel field and vanil
 **Host it:** Netlify / Cloudflare Pages / Vercel (drag in the `site` folder, no build command), or GitHub Pages from `/site` (needs a public repo or a paid plan for private repos).
 
 ## What's on it
-A minimal page in one sage palette:
-- **Hero:** letter-by-letter headline, blinking pixel cursor, and a pixel sculpture that assembles into a chip, an upward arrow and "AI" in turn (pixels dodge the cursor; click to scatter them), over a pixel field that ripples on each change.
-- **Watch it work:** a scroll-driven story where a Tlav window measures the machine, picks a model, compresses it and answers.
+- **Hero:** dark forest background, Space Grotesk headline that builds letter by letter, a halftone pixel wave (green to orange, swells near the cursor), and a pixel sculpture that morphs chip → arrow → AI.
+- **Type band:** orange, scroll-driven "your old pc can think".
+- **Watch it work:** four step cards (Measures, Chooses, Compresses, Answers); each plays its small animation once when scrolled into view.
 - **What can your computer run?** memory slider using the same catalog and formulas as `tlav/planner.py`.
-- **Feel the speed:** pick a question and watch an example reply stream at the measured speed of a 16 GB desktop or a 4 GB laptop.
-- Cluster layer split, three measured results and a one-line install.
+- **Feel the speed:** example replies streamed at measured speeds.
+- Cluster layer split, measured results and install commands.
 
 ## Colours
-One palette, Sage Bright: light sage background, forest green and a signal-orange pixel accent. Sections stay light; the results and cluster sections get a pulsing pixel field in one corner instead of a solid colour band.
+Sage palette with a dark forest hero and an orange accent; headlines in Space Grotesk, body in Inter Tight. Sections stay light; the results and cluster sections get a pulsing pixel field in one corner instead of a solid colour band.
 
 ## Keeping the tool in sync
 The catalog in the page is generated from `tlav/data/catalog.json`. After changing the catalog, regenerate the `MODELS` and `QUANTS` arrays in the script.

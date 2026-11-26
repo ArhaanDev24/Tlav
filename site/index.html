@@ -7,22 +7,25 @@
 <meta name="description" content="Tlav runs private AI on the computer you already own. It picks the best model for your memory, compresses it without losing quality, and runs it offline.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
 <style>
 /* Layout: one quiet column of large type on sage, generous space, a 12-col grid for the few
    two-part sections. Pixels (orange) are the only ornament; motion is slow and purposeful. */
 :root {
-  --bg: #eef2e8;          /* bright sage */
-  --surface: #f8faf5;
-  --ink: #1a2016;
-  --muted: #646d5b;
-  --line: #d6dccd;
-  --dot: #c6cfba;
-  --deep: #2f5a3a;        /* fresh forest: type band, model share */
+  --bg: #eaf0e3;          /* sage */
+  --surface: #f6f9f2;
+  --ink: #121811;
+  --muted: #4f5948;
+  --line: #cfd8c5;
+  --dot: #bfc9b2;
+  --deep: #2b5536;        /* forest: model share, highlights */
+  --night: #14261a;       /* hero ground */
+  --night-2: #1e3a27;
   --on-deep: #f3f6ee;
   --pixel: #ff6d3a;       /* signal orange */
   --pixel-soft: #ffd2bf;
   --sys: #b3bca6;
+  --display: "Space Grotesk", "Inter Tight", "Helvetica Neue", Arial, sans-serif;
   --sans: "Inter Tight", "Helvetica Neue", Helvetica, Arial, sans-serif;
   --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --gl: max(20px, env(safe-area-inset-left, 0px));
@@ -33,12 +36,12 @@
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 section[id] { scroll-margin-top: 80px; }
-#how { scroll-margin-top: 0; }
 html { scroll-behavior: smooth; background: var(--bg); }
 body { background: var(--bg); color: var(--ink); font: 400 17px/1.6 var(--sans); transition: background-color .5s, color .5s; -webkit-font-smoothing: antialiased; overflow-x: clip; }
-body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 60; background: var(--bg); }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 60; background: var(--bg); transition: background-color .3s; }
+.top-dark body::before { background: var(--night); }
 a { color: inherit; }
-h1, h2, h3 { font-weight: 600; letter-spacing: -0.05em; line-height: .95; margin: 0; text-wrap: balance; }
+h1, h2, h3 { font-family: var(--display); font-weight: 600; letter-spacing: -0.035em; line-height: .98; margin: 0; text-wrap: balance; }
 p { margin: 0; }
 code { font-family: var(--mono); font-size: .92em; }
 .wrap { max-width: 1240px; margin-inline: auto; padding-left: var(--gl); padding-right: var(--gr); }
@@ -49,6 +52,10 @@ code { font-family: var(--mono); font-size: .92em; }
 /* ---------- nav ---------- */
 .nav { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 50; background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); transition: box-shadow .3s; }
 .nav.solid { box-shadow: 0 1px 0 var(--line); }
+.nav { transition: box-shadow .3s, background-color .3s, color .3s; }
+.nav.on-dark { --ink: #eef3e8; --muted: #a9b8a3; --line: #2c4433; color: var(--ink); background: color-mix(in srgb, var(--night) 92%, transparent); }
+.nav.on-dark .btn { background: var(--pixel); color: var(--night); }
+.nav.on-dark .btn::before { background: #ffa47f; }
 .nav .wrap { display: flex; align-items: center; gap: 32px; height: 68px; }
 .brand { display: inline-flex; align-items: center; gap: 10px; text-decoration: none; font: 600 20px var(--sans); letter-spacing: -0.04em; }
 .brand svg { width: 16px; height: 16px; }
@@ -69,12 +76,12 @@ code { font-family: var(--mono); font-size: .92em; }
 .mobile-menu a { padding: 16px 0; font-size: 22px; letter-spacing: -0.02em; text-decoration: none; border-bottom: 1px solid var(--line); }
 
 /* ---------- hero ---------- */
-.hero { --hp: 0; position: relative; overflow: hidden; min-height: min(calc(100svh - 68px - env(safe-area-inset-top, 0px)), 760px); display: flex; flex-direction: column; justify-content: center; padding-block: clamp(56px, 8vw, 110px) clamp(90px, 10vw, 140px); }
+.hero { --hp: 0; --ink: #eef3e8; --muted: #a9b8a3; --line: #2c4433; color: var(--ink); background: radial-gradient(55% 70% at 80% 45%, var(--night-2), transparent 72%), var(--night); position: relative; overflow: hidden; min-height: min(calc(100svh - 68px - env(safe-area-inset-top, 0px)), 760px); display: flex; flex-direction: column; justify-content: center; padding-block: clamp(56px, 8vw, 110px) clamp(90px, 10vw, 140px); }
 .field { position: absolute; inset: 0; cursor: crosshair; }
-.field canvas { width: 100%; height: 100%; display: block; -webkit-mask-image: radial-gradient(90% 90% at 100% 0%, #000 15%, transparent 65%); mask-image: radial-gradient(90% 90% at 100% 0%, #000 15%, transparent 65%); }
+.field canvas { width: 100%; height: 100%; display: block; -webkit-mask-image: radial-gradient(75% 95% at 85% 40%, #000 20%, transparent 72%); mask-image: radial-gradient(75% 95% at 85% 40%, #000 20%, transparent 72%); }
 .hero .wrap { position: relative; z-index: 2; width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 32px; align-items: end; pointer-events: none; }
 .hero .wrap a, .hero .wrap button { pointer-events: auto; }
-.hero h1 { font-size: clamp(52px, 8.4vw, 136px); line-height: .85; letter-spacing: -0.075em; }
+.hero h1 { font-size: clamp(50px, 8vw, 128px); font-weight: 700; line-height: .92; letter-spacing: -0.045em; }
 .hero h1 .ln { display: block; white-space: nowrap; clip-path: inset(-0.1em -100vw 0 -0.2em); padding-bottom: .05em; margin-bottom: -.05em; will-change: transform; }
 .hero h1 .ln:nth-child(1) { transform: translateX(calc(var(--hp) * -6%)); }
 .hero h1 .ln:nth-child(2) { transform: translateX(calc(var(--hp) * 4%)); }
@@ -89,6 +96,11 @@ code { font-family: var(--mono); font-size: .92em; }
 .hero .lead { max-width: 24ch; font-size: clamp(18px, 1.7vw, 22px); line-height: 1.35; letter-spacing: -0.025em; color: var(--muted); }
 .hero .lead b { color: var(--ink); font-weight: 500; }
 .hero .ctas { display: flex; flex-wrap: wrap; gap: 12px; }
+.hero .btn { background: var(--pixel); color: var(--night); font-weight: 600; }
+.hero .btn::before { background: #ffa47f; }
+.hero .btn.ghost { background: transparent; color: var(--ink); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 45%, transparent); }
+.hero .btn.ghost::before { background: var(--ink); }
+.hero .btn.ghost:hover { color: var(--night); }
 .js .hero .lead, .js .hero .ctas { animation: fade 1.1s var(--ease) both; }
 .js .hero .lead { animation-delay: .75s; } .js .hero .ctas { animation-delay: .9s; }
 @keyframes fade { from { opacity: 0; transform: translateY(18px); } }
@@ -107,17 +119,16 @@ code { font-family: var(--mono); font-size: .92em; }
 @keyframes cue { from { top: -12px; } to { top: 46px; } }
 
 /* ---------- type band ---------- */
-.band { --p: 0; background: var(--deep); overflow: hidden; padding-block: clamp(14px, 2.2vw, 28px); }
-.band .row { font: 600 clamp(44px, 8.4vw, 128px)/.98 var(--sans); letter-spacing: -0.065em; color: var(--on-deep); white-space: nowrap; will-change: transform; }
+.band { --p: 0; background: var(--pixel); overflow: hidden; padding-block: clamp(14px, 2.2vw, 28px); }
+.band .row { font: 700 clamp(42px, 8vw, 120px)/1 var(--display); letter-spacing: -0.045em; color: var(--night); white-space: nowrap; will-change: transform; }
 .band .row:nth-child(odd) { transform: translateX(calc(-8% - var(--p) * 18%)); }
-.band .row:nth-child(even) { transform: translateX(calc(-30% + var(--p) * 18%)); color: color-mix(in srgb, var(--on-deep) 38%, var(--deep)); }
-.band .row i { display: inline-block; width: .14em; height: .14em; margin: 0 .26em .12em; background: var(--pixel); vertical-align: middle; }
+.band .row:nth-child(even) { transform: translateX(calc(-30% + var(--p) * 18%)); color: color-mix(in srgb, var(--night) 40%, var(--pixel)); }
+.band .row i { display: inline-block; width: .14em; height: .14em; margin: 0 .26em .12em; background: var(--night); vertical-align: middle; }
 
 /* ---------- sections ---------- */
 .sec { padding-block: clamp(96px, 12vw, 170px); }
-.sec.tint, .story.tint { background: var(--surface); }
-.story.tint .window, .story.tint .cand, .story.tint .msg.ai { background: var(--bg); }
-.story.tint .cand.win { background: var(--deep); }
+.sec.tint { background: var(--surface); }
+.sec.tint .msg.ai { background: var(--bg); }
 .split-head { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 24px; margin-bottom: clamp(48px, 6vw, 80px); align-items: end; }
 .split-head h2 { grid-column: 1 / span 7; font-size: clamp(44px, 6.2vw, 88px); }
 .split-head p { grid-column: 9 / span 4; color: var(--muted); font-size: 18px; max-width: 34ch; }
@@ -141,7 +152,7 @@ code { font-family: var(--mono); font-size: .92em; }
 .ghost-arrow rect { fill: var(--pixel); }
 
 /* ---------- fit tool ---------- */
-.tool { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 24px; align-items: start; }
+.tool { padding: clamp(22px, 4vw, 44px); background: var(--surface); box-shadow: 0 0 0 1px var(--line), 0 30px 60px -40px rgba(18, 24, 17, .3); display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 24px; align-items: start; }
 .picker { grid-column: 1 / span 4; display: grid; gap: 16px; }
 .ram { font: 600 clamp(80px, 10vw, 136px)/.85 var(--sans); letter-spacing: -0.07em; font-variant-numeric: tabular-nums; }
 .ram small { font-size: .3em; letter-spacing: -0.02em; color: var(--muted); margin-left: 8px; }
@@ -178,60 +189,47 @@ input[type=range]::-moz-range-thumb { width: 18px; height: 18px; background: var
 .step h3 { font-size: clamp(26px, 2.6vw, 34px); letter-spacing: -0.04em; }
 .step p { color: var(--muted); max-width: 32ch; }
 
-/* ---------- story (scroll-driven) ---------- */
-.story { position: relative; height: 420vh; }
-.story-pin { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 68px); height: calc(100svh - 68px - env(safe-area-inset-top, 0px)); display: flex; align-items: center; isolation: isolate; overflow: hidden; }
-.story-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 24px; align-items: center; width: 100%; }
-.chapters { grid-column: 1 / span 4; display: grid; gap: 4px; counter-reset: ch; }
-.chapters h2 { font-size: clamp(36px, 4.4vw, 60px); margin-bottom: 28px; }
-.chap { display: grid; grid-template-columns: 34px 1fr; gap: 2px 8px; padding: 14px 0; border-top: 1px solid var(--line); opacity: .38; transition: opacity .4s; }
-.chap::before { content: attr(data-n); grid-row: span 2; font: 500 13px/1.9 var(--mono); color: var(--pixel); }
-.chap b { font-size: 20px; font-weight: 500; letter-spacing: -0.02em; }
-.chap span { font-size: 15px; color: var(--muted); max-height: 0; overflow: hidden; transition: max-height .5s var(--ease); }
-.chap.on { opacity: 1; }
-.chap.on span { max-height: 3em; }
-.chap.on b::after { content: ""; display: inline-block; width: 7px; height: 7px; margin-left: 10px; vertical-align: 3px; background: var(--pixel); animation: breathe 2.4s ease-in-out infinite; }
-@keyframes breathe { 50% { opacity: .25; } }
-.window { --rx: 0deg; --ry: 0deg; grid-column: 6 / span 7; background: var(--surface); aspect-ratio: 16 / 11; display: flex; flex-direction: column; overflow: hidden; position: relative;
-  box-shadow: 0 0 0 1px var(--line), 0 30px 70px -30px rgba(23, 28, 19, .22), 0 24px 90px -50px color-mix(in srgb, var(--pixel) 30%, transparent);
-  transform: perspective(1800px) rotateX(var(--rx)) rotateY(var(--ry)); transition: transform 1.2s var(--ease); will-change: transform; }
-.fx { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 5; }
-.fresh { color: color-mix(in srgb, var(--pixel) 75%, var(--ink)); }
-.win-bar { display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--line); font: 12px var(--mono); color: var(--muted); }
-.win-bar i { width: 9px; height: 9px; background: var(--line); }
-.win-bar i:first-child { background: var(--pixel); }
-.win-bar span { margin-left: 8px; } .win-bar em { margin-left: auto; font-style: normal; }
-.win-body { position: relative; flex: 1; }
-.scene { position: absolute; inset: 0; padding: clamp(18px, 3vw, 36px); display: grid; align-content: center; gap: 14px; opacity: 0; transform: translateY(6px); transition: opacity .9s var(--ease), transform .9s var(--ease); pointer-events: none; }
-.scene.on { opacity: 1; transform: none; }
-.kv { display: grid; grid-template-columns: 9em 1fr auto; gap: 10px 16px; align-items: center; font-size: 15px; }
-.kv span { color: var(--muted); }
-.kv b { font-weight: 500; font-variant-numeric: tabular-nums; }
-.meter { display: grid; grid-template-columns: repeat(20, minmax(0, 1fr)); gap: 3px; }
-.meter i { aspect-ratio: 1; background: var(--line); }
-.meter i.on { background: var(--deep); }
-.meter.hot i.on { background: var(--pixel); }
-.cands { display: grid; gap: 6px; }
-.cand { display: grid; grid-template-columns: 1fr auto auto; gap: 16px; padding: 10px 14px; font-size: 15px; background: var(--bg); transition: opacity .9s var(--ease), transform .9s var(--ease), background-color .8s, color .8s, box-shadow .8s; }
-.cand span { font: 13px var(--mono); color: var(--muted); }
-.cand.out { opacity: .3; text-decoration: line-through; transform: translateX(10px); }
-.cand.win { background: var(--deep); color: var(--on-deep); transform: scale(1.012); box-shadow: 0 0 0 1px var(--pixel), 0 10px 26px -14px color-mix(in srgb, var(--pixel) 50%, transparent); }
-.cand.win span { color: color-mix(in srgb, var(--on-deep) 70%, transparent); }
-.shrink { display: grid; grid-template-columns: auto 1fr; gap: 22px; align-items: center; }
-.block { display: grid; grid-template-columns: repeat(16, 10px); gap: 3px; }
-.block i { width: 10px; height: 10px; background: var(--deep); transition: background-color .7s, transform .8s var(--ease); }
-.block i.gone { transform: scale(.4); }
-.block i.gone { background: transparent; box-shadow: inset 0 0 0 1px var(--line); }
-.big { font: 600 clamp(34px, 4vw, 56px)/1 var(--sans); letter-spacing: -0.05em; font-variant-numeric: tabular-nums; }
-.sub { font-size: 14px; color: var(--muted); }
-.ok { color: var(--deep); font-weight: 500; }
+/* ---------- watch it work: four step cards, each plays once ---------- */
+.wsteps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+.wcard { display: grid; grid-template-rows: auto auto auto 1fr; gap: 8px; padding: 22px; background: var(--bg); box-shadow: 0 0 0 1px var(--line), 0 24px 50px -38px rgba(18, 24, 17, .35); min-width: 0; }
+.wnum { font: 500 12px var(--mono); color: var(--pixel); }
+.wcard h3 { font-size: 26px; }
+.wcard > p { font-size: 15px; color: var(--muted); }
+.viz { margin-top: 14px; padding: 16px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); display: grid; gap: 10px; align-content: center; min-height: 150px; font-size: 13px; }
+.vrow { display: grid; grid-template-columns: 4.6em minmax(0, 1fr) auto; gap: 10px; align-items: center; }
+.vrow span { color: var(--muted); }
+.vrow b { font: 500 12px var(--mono); }
+.vrow i { position: relative; height: 8px; background: var(--line); }
+.vrow i::after { content: ""; position: absolute; inset: 0 auto 0 0; width: var(--w); background: var(--deep); transition: width 1.1s var(--ease); transition-delay: calc(var(--d) * .4s + .2s); }
+.vrow i.hot::after { background: var(--pixel); }
+.vm { display: flex; justify-content: space-between; gap: 10px; padding: 9px 11px; background: var(--bg); transition: opacity .7s, background-color .7s, color .7s; transition-delay: calc(var(--d) * .4s + .5s); }
+.vm span { font: 12px var(--mono); color: var(--muted); }
+.vm.out { opacity: .4; text-decoration: line-through; }
+.vm.win { background: var(--deep); color: #f3f6ee; box-shadow: inset 0 0 0 1px var(--pixel); }
+.vm.win span { color: #f3a98a; }
+.vblock { display: grid; grid-template-columns: repeat(8, 12px); gap: 3px; }
+.vblock i { width: 12px; height: 12px; background: var(--deep); transition: opacity .6s, transform .6s var(--ease); transition-delay: calc(var(--d) * .4s + var(--c) * 70ms + .3s); }
+.vblock i.cut { opacity: .12; transform: scale(.5); }
+.vcap { display: grid; gap: 2px; }
+.vcap b { font: 600 18px var(--display); letter-spacing: -0.02em; }
+.vcap span { font-size: 12px; color: var(--muted); }
+.vmsg { padding: 8px 10px; line-height: 1.45; }
+.vmsg.me { justify-self: end; background: var(--ink); color: var(--bg); }
+.vmsg.ai { background: var(--bg); min-height: 3.2em; }
+.vmeta { font: 12px var(--mono); color: var(--muted); }
+.vmeta b { color: var(--pixel); font-weight: 500; }
+/* before the cards play (only when scripts run) */
+.js .wsteps:not(.play) .vrow i::after { width: 0; }
+.js .wsteps:not(.play) .vm.out { opacity: 1; text-decoration: none; }
+.js .wsteps:not(.play) .vm.win { background: var(--bg); color: var(--ink); box-shadow: none; }
+.js .wsteps:not(.play) .vm.win span { color: var(--muted); }
+.js .wsteps:not(.play) .vblock i.cut { opacity: 1; transform: none; }
+/* chat message styles shared with "Feel the speed" */
 .chatlog { display: grid; gap: 12px; align-content: end; }
 .msg { max-width: 82%; padding: 12px 16px; font-size: 15px; line-height: 1.5; white-space: pre-line; }
 .msg.me { justify-self: end; background: var(--ink); color: var(--bg); }
 .msg.ai { justify-self: start; background: var(--bg); }
 .caret { display: inline-block; width: 8px; height: 15px; margin-left: 2px; background: var(--pixel); vertical-align: -2px; animation: blink 1s steps(1) infinite; }
-.stat-line { display: flex; gap: 18px; font: 12px var(--mono); color: var(--muted); }
-.stat-line b { color: var(--pixel); font-weight: 500; }
 
 /* ---------- try it (chat demo) ---------- */
 .demo { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 24px; align-items: start; }
@@ -244,7 +242,7 @@ input[type=range]::-moz-range-thumb { width: 18px; height: 18px; background: var
 .device button[aria-pressed="true"] { color: var(--ink); border-color: var(--ink); }
 .chatwrap { grid-column: 6 / span 7; min-width: 0; }
 .sec.tint .chatbox { background: var(--bg); }
-.chatbox { background: var(--surface); box-shadow: 0 1px 0 var(--line); display: flex; flex-direction: column; min-height: 420px; }
+.chatbox { box-shadow: 0 0 0 1px var(--line), 0 30px 60px -40px rgba(18, 24, 17, .3); background: var(--surface); box-shadow: 0 1px 0 var(--line); display: flex; flex-direction: column; min-height: 420px; }
 .chatbox .chatlog { flex: 1; padding: clamp(18px, 3vw, 30px); }
 .chatbox .foot { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 12px 16px; border-top: 1px solid var(--line); font: 12px var(--mono); color: var(--muted); }
 .chatbox .foot b { color: var(--ink); font-weight: 500; }
@@ -299,19 +297,17 @@ footer .wrap { display: flex; flex-wrap: wrap; gap: 12px 28px; justify-content: 
 footer a { text-decoration: none; }
 footer a:hover { color: var(--ink); }
 
+.ram, .model, .num b, .final h2 { font-family: var(--display); }
+.ram { letter-spacing: -0.05em; } .num b { letter-spacing: -0.04em; }
+
 /* ---------- responsive ---------- */
 @media (max-width: 960px) {
   .split-head h2, .split-head p { grid-column: 1 / -1; }
   .picker, .answer { grid-column: 1 / -1; }
   .steps, .nums { grid-template-columns: minmax(0, 1fr); }
   .ghost-arrow { width: 54px; }
-  .chapters, .window, .prompts, .chatwrap { grid-column: 1 / -1; }
-  .story-pin { align-items: start; padding-top: 16px; }
-  .story-grid { gap: 16px; }
-  .chapters h2 { font-size: 30px; margin-bottom: 4px; }
-  .chap { display: none; padding: 8px 0; }
-  .chap.on { display: grid; }
-  .window { aspect-ratio: auto; height: min(62svh, 520px); transform: none; }
+  .prompts, .chatwrap { grid-column: 1 / -1; }
+  .wsteps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .field { width: 100%; height: 60%; }
 }
 @media (max-width: 720px) {
@@ -320,11 +316,10 @@ footer a:hover { color: var(--ink); }
   .hero .wrap { grid-template-columns: minmax(0, 1fr); }
   .morph { justify-self: center; width: min(60vw, 260px); margin-top: 8px; }
   .hero { min-height: 0; padding-block: 56px 110px; }
-  .hero h1 { font-size: 18vw; }
+  .hero h1 { font-size: 15vw; }
   .specs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .cells { grid-template-columns: repeat(16, minmax(0, 1fr)); }
-  .kv { grid-template-columns: 7em 1fr; } .kv .meter { grid-column: 1 / -1; }
-  .shrink { grid-template-columns: minmax(0, 1fr); } .block { grid-template-columns: repeat(16, 8px); } .block i { width: 8px; height: 8px; }
+  .wsteps { grid-template-columns: minmax(0, 1fr); }
   .msg { max-width: 92%; font-size: 14px; }
   .layers { grid-template-columns: repeat(24, minmax(0, 1fr)); }
 }
@@ -334,9 +329,6 @@ footer a:hover { color: var(--ink); }
   .hero h1 .ln, .morph { transform: none !important; }
   .js .reveal.pre { transform: none; opacity: 1; }
   .js .layers.pre i { transform: none; }
-  .story { height: auto; } .story-pin { position: static; height: auto; padding-block: 40px; }
-  .scene { position: static; opacity: 1; transform: none; } .win-body { display: grid; gap: 30px; }
-  .window { aspect-ratio: auto; } .chap { opacity: 1; } .chap span { max-height: none; }
   .band .row:nth-child(odd), .band .row:nth-child(even) { transform: translateX(-10%); }
 }
 </style>
@@ -382,50 +374,45 @@ footer a:hover { color: var(--ink); }
     <div class="row">your old pc can think<i></i>your old pc can think<i></i>your old pc can think</div>
   </section>
 
-  <section class="story tint" id="how" aria-labelledby="how-title">
-    <div class="story-pin">
-      <div class="wrap story-grid">
-        <div class="chapters">
-          <span class="kicker">01 · How it works</span>
-          <h2 id="how-title">Watch it work.</h2>
-          <div class="chap" data-i="0" data-n="01"><b>Measures</b><span>Memory, processor and real speed.</span></div>
-          <div class="chap" data-i="1" data-n="02"><b>Chooses</b><span>The strongest model that runs smoothly.</span></div>
-          <div class="chap" data-i="2" data-n="03"><b>Compresses</b><span>A third of the size, quality checked.</span></div>
-          <div class="chap" data-i="3" data-n="04"><b>Answers</b><span>Privately, on your own machine.</span></div>
-        </div>
-        <div class="window" aria-hidden="true">
-          <div class="win-bar"><i></i><i></i><i></i><span>tlav setup</span><em id="winStatus">measuring…</em></div>
-          <div class="win-body">
-            <div class="scene" data-s="0">
-              <div class="kv"><span>Memory</span><b id="m1">16 GB</b><div class="meter" id="mt1"></div></div>
-              <div class="kv"><span>Processor</span><b>4 cores · AVX2</b><div class="meter" id="mt2"></div></div>
-              <div class="kv"><span>Memory speed</span><b id="m3">16.2 GB/s</b><div class="meter hot" id="mt3"></div></div>
-            </div>
-            <div class="scene" data-s="1">
-              <div class="cands" id="cands">
-                <div class="cand"><b>Qwen3 14B</b><span>9.4 GB</span><span>1.8 t/s</span></div>
-                <div class="cand"><b>Gemma 2 9B</b><span>8.2 GB</span><span>2.9 t/s</span></div>
-                <div class="cand"><b>Qwen3 8B</b><span>6.1 GB</span><span>3.2 t/s</span></div>
-                <div class="cand"><b>Qwen2.5 7B</b><span>5.1 GB</span><span>3.5 t/s</span></div>
-                <div class="cand"><b>Llama 3.2 3B</b><span>2.2 GB</span><span>7.1 t/s</span></div>
-              </div>
-            </div>
-            <div class="scene" data-s="2">
-              <div class="shrink">
-                <div class="block" id="block"></div>
-                <div style="display:grid;gap:8px"><span class="big" id="size">16.4 GB</span><span class="sub">model size</span><span class="big" id="qual" style="margin-top:12px">100%</span><span class="sub">quality kept <span class="ok" id="qok"></span></span></div>
-              </div>
-            </div>
-            <div class="scene" data-s="3">
-              <div class="chatlog">
-                <div class="msg me">Can you summarise this email in one line?</div>
-                <div class="msg ai"><span id="storyText"></span><span class="caret"></span></div>
-              </div>
-              <div class="stat-line"><span><b>3.2</b> tokens/s</span><span>Qwen3 8B · Q4_K_M</span><span>offline</span></div>
-            </div>
-            <canvas class="fx" id="fx"></canvas>
+  <section class="sec tint" id="how" aria-labelledby="how-title">
+    <div class="wrap">
+      <div class="split-head reveal">
+        <span class="kicker">01 · How it works</span>
+        <h2 id="how-title">Watch it work.</h2>
+        <p>One command, <code>tlav setup</code>, does four things in order.</p>
+      </div>
+      <div class="wsteps" id="wsteps">
+        <article class="wcard" style="--d:0">
+          <span class="wnum">01</span><h3>Measures</h3><p>Memory, processor and real speed.</p>
+          <div class="viz" aria-label="Memory 16 GB, 4 cores, 16 GB per second">
+            <div class="vrow"><span>Memory</span><i style="--w:100%"></i><b>16 GB</b></div>
+            <div class="vrow"><span>Cores</span><i style="--w:50%"></i><b>4</b></div>
+            <div class="vrow"><span>Speed</span><i class="hot" style="--w:72%"></i><b>16 GB/s</b></div>
           </div>
-        </div>
+        </article>
+        <article class="wcard" style="--d:1">
+          <span class="wnum">02</span><h3>Chooses</h3><p>The strongest model that runs smoothly.</p>
+          <div class="viz" aria-label="Qwen3 8B chosen; Qwen3 14B too big, Llama 3.2 3B weaker">
+            <div class="vm out">Qwen3 14B<span>too big</span></div>
+            <div class="vm win">Qwen3 8B<span>best fit</span></div>
+            <div class="vm out">Llama 3.2 3B<span>weaker</span></div>
+          </div>
+        </article>
+        <article class="wcard" style="--d:2">
+          <span class="wnum">03</span><h3>Compresses</h3><p>Under a third of the size, quality checked.</p>
+          <div class="viz" aria-label="16.4 GB compressed to 4.9 GB with 97.5% quality kept">
+            <div class="vblock"><i style="--c:0"></i><i style="--c:1"></i><i style="--c:2"></i><i style="--c:3" class="cut"></i><i style="--c:4" class="cut"></i><i style="--c:5" class="cut"></i><i style="--c:6" class="cut"></i><i style="--c:7" class="cut"></i><i style="--c:0"></i><i style="--c:1"></i><i style="--c:2"></i><i style="--c:3" class="cut"></i><i style="--c:4" class="cut"></i><i style="--c:5" class="cut"></i><i style="--c:6" class="cut"></i><i style="--c:7" class="cut"></i><i style="--c:0"></i><i style="--c:1"></i><i style="--c:2"></i><i style="--c:3" class="cut"></i><i style="--c:4" class="cut"></i><i style="--c:5" class="cut"></i><i style="--c:6" class="cut"></i><i style="--c:7" class="cut"></i><i style="--c:0"></i><i style="--c:1"></i><i style="--c:2"></i><i style="--c:3" class="cut"></i><i style="--c:4" class="cut"></i><i style="--c:5" class="cut"></i><i style="--c:6" class="cut"></i><i style="--c:7" class="cut"></i><i style="--c:0"></i><i style="--c:1"></i><i style="--c:2"></i><i style="--c:3" class="cut"></i><i style="--c:4" class="cut"></i><i style="--c:5" class="cut"></i><i style="--c:6" class="cut"></i><i style="--c:7" class="cut"></i><i style="--c:0"></i><i style="--c:1"></i><i style="--c:2"></i><i style="--c:3" class="cut"></i><i style="--c:4" class="cut"></i><i style="--c:5" class="cut"></i><i style="--c:6" class="cut"></i><i style="--c:7" class="cut"></i></div>
+            <div class="vcap"><b>16.4 → 4.9 GB</b><span>97.5% quality kept</span></div>
+          </div>
+        </article>
+        <article class="wcard" style="--d:3">
+          <span class="wnum">04</span><h3>Answers</h3><p>Privately, on your own machine.</p>
+          <div class="viz">
+            <div class="vmsg me">Summarise this email</div>
+            <div class="vmsg ai" id="vtype">Friday's delivery moved to Monday, with 10% off the next order.</div>
+            <div class="vmeta"><b>3.2</b> tok/s · offline</div>
+          </div>
+        </article>
       </div>
     </div>
   </section>
@@ -640,32 +627,30 @@ footer a:hover { color: var(--ink); }
   let W = 0, H = 0, grid = [], running = false, mouse = { x: -999, y: -999 }, born = performance.now();
   const waves = [];          // pixel ripples: {x, y, t0}
   const waveFromArrow = (t) => { const a = $("arrow").getBoundingClientRect(), c = canvas.getBoundingClientRect(); waves.push({ x: a.left + a.width * .7 - c.left, y: a.top + a.height * .3 - c.top, t0: t }); };
+  // halftone wave: a regular grid of square dots whose size swells in a slow wave (green → orange)
+  const GAP = 18;
+  const mixHex = (a, b, k) => { const pa = parseInt(a.slice(1), 16), pb = parseInt(b.slice(1), 16); const ch = (s) => Math.round(((pa >> s) & 255) * (1 - k) + ((pb >> s) & 255) * k); return `rgb(${ch(16)},${ch(8)},${ch(0)})`; };
+  const PAL = Array.from({ length: 17 }, (_, i) => mixHex("#3f6e4c", "#ff6d3a", Math.pow(i / 16, 1.6)));
   const build = () => {
     const r = canvas.getBoundingClientRect(), dpr = Math.min(2, devicePixelRatio || 1);
     W = r.width; H = r.height; canvas.width = W * dpr; canvas.height = H * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    grid = []; let s = 13; const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
-    for (let y = 11; y < H; y += 22) for (let x = 11; x < W; x += 22) {
-      const w = Math.max(0, (x / W) * .8 + (1 - y / H) * .8 - .74);
-      grid.push({ x, y, lit: rnd() < w, big: rnd() < .3, ph: rnd() * 6.28, sp: .4 + rnd(), heat: 0, d: (W - x + y) / (W + H) });
-    }
+    grid = [];
+    for (let y = GAP / 2; y < H; y += GAP) for (let x = GAP / 2; x < W; x += GAP) grid.push({ x, y, heat: 0, d: (W - x + y) / (W + H) });
   };
   const draw = (t) => {
-    const age = reduced ? 9 : (t - born) / 1000;
+    const T = reduced ? 3 : t / 1000, age = reduced ? 9 : (t - born) / 1000;
     ctx.clearRect(0, 0, W, H);
     for (const c of grid) {
-      if (age < c.d * 1.6) continue;  // field fades in from the top-right corner
+      if (age < c.d * 1.4) continue;  // fades in from the top-right
+      const w = .5 + .28 * Math.sin(c.x * .011 + T * .55) + .22 * Math.sin(c.y * .017 - T * .42 + c.x * .004);
       const dm = Math.hypot(c.x - mouse.x, c.y - mouse.y);
       let wv = 0;
-      for (const w of waves) {
-        const r = (t - w.t0) * .55, d = Math.hypot(c.x - w.x, c.y - w.y), band = Math.abs(d - r);
-        if (band < 26) wv = Math.max(wv, (1 - band / 26) * Math.max(0, 1 - r / 1400));
-      }
-      c.heat = dm < 120 ? Math.min(1, c.heat + .12) : Math.max(c.heat * .93, wv);
-      if (c.lit || c.heat > .05) {
-        const tw = reduced ? 1 : .55 + .45 * Math.sin(t / 1000 * c.sp + c.ph), a = Math.max(c.lit ? tw : 0, c.heat), sz = (c.big ? 5 : 3) * (.8 + .2 * a);
-        ctx.globalAlpha = .22 + .55 * a; ctx.fillStyle = a > .72 ? col.px : col.soft;
-        ctx.fillRect(Math.round(c.x - sz / 2), Math.round(c.y - sz / 2), Math.round(sz), Math.round(sz));
-      } else { ctx.globalAlpha = 1; ctx.fillStyle = col.dot; ctx.fillRect(c.x - 1, c.y - 1, 2, 2); }
+      for (const s of waves) { const rr = (t - s.t0) * .45, band = Math.abs(Math.hypot(c.x - s.x, c.y - s.y) - rr); if (band < 40) wv = Math.max(wv, (1 - band / 40) * Math.max(0, 1 - rr / 1200)); }
+      c.heat = dm < 110 ? Math.min(1, c.heat + .1) : c.heat * .92;
+      const v = Math.min(1, w * .8 + c.heat * .55 + wv * .4);
+      const sz = 1.4 + v * v * 8;
+      ctx.globalAlpha = .3 + .7 * v; ctx.fillStyle = PAL[Math.round(v * 16)];
+      ctx.fillRect(Math.round(c.x - sz / 2), Math.round(c.y - sz / 2), Math.round(sz), Math.round(sz));
     }
     ctx.globalAlpha = 1;
   };
@@ -742,110 +727,18 @@ footer a:hover { color: var(--ink); }
   $("ram").addEventListener("input", render);
   render();
 
-  /* ---------- story: scroll drives the Tlav window ---------- */
-  const story = $("how"), chaps = story.querySelectorAll(".chap"), scenes = story.querySelectorAll(".scene");
-  const mk = (el, n, cls) => { for (let i = 0; i < n; i++) { const c = document.createElement("i"); if (cls) c.className = cls; el.appendChild(c); } return el.children; };
-  const meters = [mk($("mt1"), 20), mk($("mt2"), 20), mk($("mt3"), 20)], meterTo = [20, 12, 15];
-  const blockCells = mk($("block"), 160);
-  const cands = [...$("cands").children];
-  const STORY_TEXT = "Your supplier has moved Friday's delivery to Monday and is offering 10% off the next order as an apology.";
-  const statusTxt = ["measuring…", "choosing a model…", "compressing…", "ready · offline"];
-  let lastScene = -1, lastWin = false, lastKeep = 16, lastOk = false, lastWipe = 0;
-
-  /* fx layer: pixel wipe between steps + particle bursts */
-  const fx = $("fx"), fg = fx.getContext("2d"), win = story.querySelector(".window");
-  let FW = 0, FH = 0, parts2 = [], wipeT = -1, fxOn = false;
-  const fxSize = () => { const r = fx.getBoundingClientRect(), dpr = Math.min(2, devicePixelRatio || 1); FW = r.width; FH = r.height; fx.width = FW * dpr; fx.height = FH * dpr; fg.setTransform(dpr, 0, 0, dpr, 0, 0); };
-  const rel = (el) => { const a = el.getBoundingClientRect(), b = fx.getBoundingClientRect(); return { x: a.left - b.left, y: a.top - b.top, w: a.width, h: a.height }; };
-  const burst = (x, y, n, spread = 1, up = 0) => {
+  /* ---------- watch it work: each card plays once when the section comes into view ---------- */
+  const wsteps = $("wsteps"), vtype = $("vtype"), VTEXT = vtype.textContent;
+  const playSteps = () => {
+    wsteps.classList.add("play");
     if (reduced) return;
-    for (let i = 0; i < n; i++) {
-      const a = Math.random() * 6.28, s = (.25 + Math.random() * .7) * spread;
-      parts2.push({ x, y, vx: Math.cos(a) * s + up * .15, vy: Math.sin(a) * s - up * .35, life: 1, sz: 2 + Math.random() * 2, c: Math.random() < .75 ? col.px : col.soft });
-    }
-    wakeFx();
+    vtype.textContent = ""; let n = 0;
+    setTimeout(() => { const iv = setInterval(() => { n += 2; vtype.textContent = VTEXT.slice(0, n); if (n >= VTEXT.length) clearInterval(iv); }, 45); }, 1700);
   };
-  const fxDraw = (t) => {
-    fg.clearRect(0, 0, FW, FH);
-    if (wipeT >= 0) {
-      // light diagonal shimmer: small, sparse pixels that pass once and fade
-      const C = 12, cols = Math.ceil(FW / C), rows = Math.ceil(FH / C), dur = 520, life = 200, el = t - wipeT;
-      if (el > dur + life) wipeT = -1;
-      else for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) {
-        if ((x * 5 + y * 3) % 3) continue;                       // only every third cell
-        const d = (x + y) / (cols + rows) * dur, k = (el - d) / life;
-        if (k <= 0 || k >= 1) continue;
-        const s = 5 * Math.sin(k * Math.PI);
-        fg.globalAlpha = Math.sin(k * Math.PI) * .45; fg.fillStyle = (x + y) % 4 ? col.px : col.soft;
-        fg.fillRect(x * C + (C - s) / 2, y * C + (C - s) / 2, s, s);
-      }
-    }
-    parts2 = parts2.filter((q) => q.life > 0);
-    for (const q of parts2) {
-      q.x += q.vx; q.y += q.vy; q.vy += .008; q.vx *= .99; q.life -= .007;
-      fg.globalAlpha = Math.max(0, q.life) * .7; fg.fillStyle = q.c; fg.fillRect(Math.round(q.x), Math.round(q.y), Math.round(q.sz), Math.round(q.sz));
-    }
-    fg.globalAlpha = 1;
-  };
-  const fxLoop = (t) => { fxDraw(t); if (fxOn && (wipeT >= 0 || parts2.length)) requestAnimationFrame(fxLoop); else { fxOn = false; fxDraw(t); } };
-  const wakeFx = () => { if (!fxOn) { fxOn = true; requestAnimationFrame(fxLoop); } };
-  fxSize(); addEventListener("resize", fxSize);
-
-  /* gentle tilt toward the pointer */
-  const pin = story.querySelector(".story-pin");
-  if (!reduced && matchMedia("(pointer: fine)").matches) {
-    pin.addEventListener("pointermove", (e) => { const r = win.getBoundingClientRect(), x = (e.clientX - r.left) / r.width - .5, y = (e.clientY - r.top) / r.height - .5;
-      win.style.setProperty("--ry", (x * 2.4).toFixed(2) + "deg"); win.style.setProperty("--rx", (-y * 2).toFixed(2) + "deg"); });
-    pin.addEventListener("pointerleave", () => { win.style.setProperty("--ry", "0deg"); win.style.setProperty("--rx", "0deg"); });
-  }
-
-  const setStory = (p) => {
-    const n = scenes.length, idx = Math.min(n - 1, Math.floor(p * n)), sp = Math.min(1, (p * n) - idx);
-    story.style.setProperty("--sp", p.toFixed(4));
-    if (idx !== lastScene) {
-      scenes.forEach((s, i) => s.classList.toggle("on", i === idx));
-      chaps.forEach((c, i) => c.classList.toggle("on", i === idx));
-      const wr = win.getBoundingClientRect(), now = performance.now();
-      if (lastScene !== -1 && !reduced && wr.bottom > 0 && wr.top < innerHeight && now - lastWipe > 500) { wipeT = now; lastWipe = now; wakeFx(); }
-      $("winStatus").textContent = statusTxt[idx]; lastScene = idx;
-    }
-    if (idx === 0) {
-      meters.forEach((m, k) => [...m].forEach((c, i) => c.classList.toggle("on", i < Math.round(meterTo[k] * Math.min(1, sp * 1.6 - k * .2)))));
-      $("m1").textContent = Math.max(1, Math.round(16 * Math.min(1, sp * 1.8))) + " GB";
-      $("m3").textContent = (16.2 * Math.max(.05, Math.min(1, sp * 1.6 - .4))).toFixed(1) + " GB/s";
-    }
-    if (idx === 1) {
-      const step = Math.floor(sp * 5), out = [0, 1, 3, 4];
-      cands.forEach((c, i) => { c.classList.toggle("out", out.includes(i) && out.indexOf(i) < step); c.classList.toggle("win", i === 2 && step >= 4); });
-      const won = step >= 4;
-      if (won && !lastWin) { const r = rel(cands[2]); burst(r.x + r.w / 2, r.y + r.h / 2, 12, 1); }
-      lastWin = won;
-    }
-    if (idx === 2) {
-      const k = Math.min(1, sp * 1.3), keepCols = Math.round(16 - k * 11);
-      [...blockCells].forEach((c, i) => c.classList.toggle("gone", i % 16 >= keepCols));
-      if (keepCols < lastKeep) for (let cc = keepCols; cc < lastKeep; cc++) for (let row = 1; row < 10; row += 4) {
-        const r = rel(blockCells[row * 16 + cc]); burst(r.x + r.w / 2, r.y + r.h / 2, 1, .6, 1);
-      }
-      lastKeep = keepCols;
-      if (k >= 1 && !lastOk) { const r = rel($("qual")); burst(r.x + r.w, r.y + r.h / 2, 8, .8); }
-      lastOk = k >= 1;
-      $("size").textContent = (16.4 - k * 11.5).toFixed(1) + " GB";
-      $("qual").textContent = (100 - k * 2.5).toFixed(1) + "%";
-      $("qok").textContent = k >= 1 ? "· check passed" : "";
-    }
-    if (idx === 3) {
-      const len = Math.round(STORY_TEXT.length * Math.min(1, sp * 1.4)), cut = Math.max(0, len - 10), out = $("storyText");
-      out.textContent = STORY_TEXT.slice(0, cut);
-      if (len > cut) { const f = document.createElement("span"); f.className = "fresh"; f.textContent = STORY_TEXT.slice(cut, len); out.appendChild(f); }
-    }
-    if (idx !== 2) { lastKeep = 16; lastOk = false; }
-    if (idx !== 1) lastWin = false;
-  };
-  const storyProgress = () => { const r = story.getBoundingClientRect(), total = r.height - innerHeight; return Math.max(0, Math.min(.999, -r.top / Math.max(1, total))); };
-  if (reduced) { scenes.forEach((s) => s.classList.add("on")); chaps.forEach((c) => c.classList.add("on")); meters.forEach((m, k) => [...m].forEach((c, i) => c.classList.toggle("on", i < meterTo[k])));
-    cands[2].classList.add("win"); [...blockCells].forEach((c, i) => c.classList.toggle("gone", i % 16 >= 5)); $("size").textContent = "4.9 GB"; $("qual").textContent = "97.5%"; $("storyText").textContent = STORY_TEXT; }
-  else setStory(storyProgress());
+  if (!reduced && "IntersectionObserver" in window) {
+    const so = new IntersectionObserver((e) => { if (e[0].isIntersecting) { so.disconnect(); playSteps(); } }, { threshold: .35 });
+    so.observe(wsteps);
+  } else wsteps.classList.add("play");
 
   /* ---------- try it: replies streamed at measured speeds ---------- */
   const REPLIES = [
@@ -980,8 +873,9 @@ footer a:hover { color: var(--ink); }
   const band = $("band"), nav = $("nav"); let ticking = false;
   const onScroll = () => {
     ticking = false; nav.classList.toggle("solid", scrollY > 10);
+    const heroBottom = $("hero").getBoundingClientRect().bottom, dark = heroBottom > 68;
+    nav.classList.toggle("on-dark", dark); root.classList.toggle("top-dark", dark);
     if (reduced) return;
-    setStory(storyProgress());
     const heroEl = $("hero");
     heroEl.style.setProperty("--hp", Math.max(0, Math.min(1, scrollY / heroEl.offsetHeight)).toFixed(4));
     const r = band.getBoundingClientRect();
