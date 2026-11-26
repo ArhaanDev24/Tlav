@@ -90,6 +90,18 @@ class GGUFInfo:
     n_params: int
     n_expert_params: int = 0
     tensor_types: Dict[str, int] = field(default_factory=dict)
+    n_lookup_params: int = 0     # embedding tables: only one row is read per token
+
+    @property
+    def stream_params(self) -> int:
+        """Weights read from memory for every generated token (decides speed on a CPU)."""
+        return max(1, self.active_params - self.n_lookup_params)
+
+    @property
+    def reasons(self) -> bool:
+        """The chat template has a thinking mode (Qwen3-style <think> or enable_thinking)."""
+        tpl = self.metadata.get("tokenizer.chat_template") or ""
+        return isinstance(tpl, str) and ("<think>" in tpl or "enable_thinking" in tpl)
 
     def _a(self, key: str, default=None):
         return self.metadata.get(f"{self.arch}.{key}", default)
@@ -142,8 +154,10 @@ class GGUFInfo:
         q = estimate_quality(ab if self.expert_count else pb, moe_total_b=pb if self.expert_count else None)
         return Model(id=model_id, name=self.name or model_id, repo=repo, params_b=round(pb, 6),
                      layers=self.layers, kv_heads=self.kv_heads, head_dim=self.head_dim,
-                     max_ctx=self.context_length, quality={"chat": q, "code": q - 3}, tags=["chat"],
-                     active_params_b=round(ab, 6) if self.expert_count else None)
+                     max_ctx=self.context_length, quality={"chat": q, "code": q - 3},
+                     tags=["chat"] + (["reasoning"] if self.reasons else []),
+                     active_params_b=round(ab, 6) if self.expert_count else None,
+                     stream_params_b=round(self.stream_params / 1e9, 4))
 
 
 def read(path_or_url: str) -> GGUFInfo:
@@ -162,6 +176,8 @@ def read(path_or_url: str) -> GGUFInfo:
             meta[key] = _value(s, vtype, keep_arrays=False)
         n_params = n_expert = 0
         types: Dict[str, int] = {}
+        embed = per_layer = 0
+        has_output = False
         for _ in range(n_tensors):
             tname = _str(s)
             dims = [_u64(s) for _ in range(_u32(s))]
@@ -173,12 +189,20 @@ def read(path_or_url: str) -> GGUFInfo:
             n_params += count
             if "_exps" in tname:
                 n_expert += count
+            if tname == "token_embd.weight":
+                embed = count
+            elif tname.startswith("per_layer_token_embd"):
+                per_layer += count
+            elif tname == "output.weight":
+                has_output = True
             types[str(ttype)] = types.get(str(ttype), 0) + count
     finally:
         s.close()
     arch = meta.get("general.architecture", "unknown")
+    # Without a separate output matrix the embedding table doubles as it and is read every token.
+    lookup = per_layer + (embed if has_output else 0)
     return GGUFInfo(arch=arch, name=meta.get("general.name", ""), metadata=meta, n_params=n_params,
-                    n_expert_params=n_expert, tensor_types=types)
+                    n_expert_params=n_expert, tensor_types=types, n_lookup_params=lookup)
 
 
 def hf_url(repo: str, filename: str) -> str:

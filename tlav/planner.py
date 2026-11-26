@@ -99,6 +99,8 @@ class Plan:
 
 def _node_gbps(node: Node, model: Model, quant: Quant, weights_here_gb: float) -> float:
     gbps = node.gbps
+    if quant.name.startswith("IQ") and node.hw.simd in ("baseline", "avx"):
+        gbps *= 0.65  # lattice codebooks decode slowly without AVX2 (e.g. pre-2013 Intel)
     if node.hw.gpu == "cuda" and node.hw.gpu_vram_gb >= weights_here_gb:
         gbps = max(gbps, 150.0)  # conservative for old GTX-class cards
     elif node.hw.gpu == "metal":
@@ -179,16 +181,12 @@ def _quants_for(min_quant: str, quants: Optional[List[Quant]] = None) -> List[Qu
     `quants` describes the files that actually exist (e.g. a Hugging Face repo),
     using their real bits per weight; otherwise Tlav's standard levels are used.
     """
-    floor = catalog.QUANT_BY_NAME[min_quant].bpw - 0.3
     if quants is not None:
-        # Standard levels are judged by name (real files of hybrid/odd models can be smaller
-        # than the nominal bits/weight); unknown ones (IQ4_XS, Q4_K_L...) by their real size.
-        rank = {q.name: i for i, q in enumerate(catalog.QUANTS)}
-        def allowed(q):
-            if q.name in rank:
-                return rank[q.name] <= rank[min_quant] and q.name not in ("F16", "BF16")
-            return floor <= q.bpw < 12
-        return sorted((q for q in quants if allowed(q)), key=lambda q: -q.bpw)
+        # Judge real files by how much quality their level keeps, not by bits/weight: hybrid
+        # models ship smaller files, and IQ4_XS keeps almost Q4_K_M quality in less space.
+        floor = catalog.QUANT_BY_NAME[min_quant].retention - 1e-9
+        ok = [q for q in quants if q.retention >= floor and q.bpw < 12 and q.name not in ("F16", "BF16")]
+        return sorted(ok, key=lambda q: (-q.retention, q.bpw))
     return [q for q in catalog.quants_down_to(min_quant) if q.name != "F16"]  # F16 never pays off on CPU
 
 
@@ -253,6 +251,24 @@ def candidates(hw: Hardware, effective_gbps: float, task: str = "chat", min_tps:
             plans.append(plan)
     # quality first; prefer faster when quality is within 1 point
     return rank(plans)
+
+
+def fit_target(model: Model, node: Node, kv: str = DEFAULT_KV, min_bpw: float = 3.9,
+               min_tps: float = 0.0) -> Optional[tuple]:
+    """(file size in GB, context) for an exact-fit build: the RAM left after the context
+    cache and buffers goes to weights, capped at Q8_0 (more bits stop helping) and at the
+    size that still generates `min_tps` tokens per second."""
+    q8 = model.weights_gb(catalog.QUANT_BY_NAME["Q8_0"])
+    if min_tps > 0:
+        # bytes read per token scale with file size: stream share of all weights
+        share = model.active_gb(catalog.QUANT_BY_NAME["Q8_0"]) / q8
+        q8 = min(q8, _node_gbps(node, model, catalog.QUANT_BY_NAME["Q8_0"], q8) / min_tps / 1.074 / share)
+    for ctx in CONTEXT_CHOICES:
+        ctx = min(ctx, model.max_ctx)
+        room = node.budget - model.kv_cache_gb(ctx, KV_BYTES[kv]) - overhead_gb(model)
+        if room * 8 * 1024 ** 3 / (model.params_b * 1e9) >= max(min_bpw, 4.5 if ctx > 2048 else min_bpw):
+            return round(min(room, q8) * 0.98, 2), ctx
+    return None
 
 
 def shortlist(plans: List[Plan], n: int = 5) -> List[Plan]:
