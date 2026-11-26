@@ -47,6 +47,8 @@ def test_save_and_load(tmp_path, monkeypatch):
 def test_think_default_follows_speed():
     assert chat.Chat("u", {"est_tps": 2.7}).think is False
     assert chat.Chat("u", {"est_tps": 20}).think is True
+    assert chat.Chat("u", {"est_tps": 37, "params_b": 0.8}).think is False   # tiny models over-think
+    assert chat.Chat("u", {"est_tps": 20, "reasons": False}).think is False
 
 
 def test_mark_cursor_circles_and_cleans_up(capsys):
@@ -103,3 +105,14 @@ def test_mark_wraps_words_with_indent(capsys):
     assert all(len(l) <= 18 for l in lines)                      # room left for the square
     assert all(l.startswith("  ") for l in lines)                # indent kept on wrapped lines
     assert " ".join(w for l in lines for w in l.split()) == "alpha beta gamma delta epsilon"
+
+
+def test_reasoning_counts_on_status_line(capsys):
+    m = chat.Mark(enabled=True, interval=10)
+    m.start()
+    m.thought("let me think")
+    m.thought(" more")
+    m.write("Answer")
+    m.stop()
+    out = capsys.readouterr().out
+    assert "thinking, 2 tokens" in out and "let me think" not in out

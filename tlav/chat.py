@@ -37,6 +37,7 @@ HELP = """\
   /new              start a fresh conversation
   /system TEXT      set how the assistant should behave (empty: clear)
   /think [on|off]   let the model reason before answering (slower, smarter)
+  /thoughts         show or hide the reasoning text itself
   /temp X           creativity, 0 = precise, 1 = creative (now {temp})
   /save [NAME]      save this conversation
   /load NAME        open a saved conversation (/load last = the previous one)
@@ -97,6 +98,7 @@ class Mark:
         self.word = ""        # never splits a word, leaves a column for the moving square)
         self.style = None
         self.width = max(20, shutil.get_terminal_size((80, 24)).columns)
+        self.thought_chunks = 0
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._run, daemon=True) if enabled else None
 
@@ -108,7 +110,24 @@ class Mark:
 
     def _header(self) -> str:
         secs = int(time.time() - self.t0)
-        return f"\r\033[K  {self._frame()} {self.verb()}…" + dim(f"  {secs}s" if secs else "")
+        extra = (f"  {secs}s" if secs else "") + (f" · thinking, {self.thought_chunks} tokens"
+                                                    if self.thought_chunks else "")
+        line = f"  {self.FRAMES[self.i % 4]} {self.verb()}…{extra}"
+        if len(line) > self.width - 1:   # never wrap the status line, or \r can't redraw it
+            line = line[: self.width - 2] + "…"
+        head, rest = line[:3], line[3:]
+        verb_end = rest.find("…") + 1
+        return "\r\033[K" + head[:2] + accent(head[2]) + rest[:verb_end] + dim(rest[verb_end:])
+
+    def thought(self, text: str) -> None:
+        """Reasoning text arrived: count it on the status line instead of printing it."""
+        if not self.on:
+            return
+        with self.lock:
+            self.thought_chunks += 1
+            if not self.writing:
+                sys.stdout.write(self._header())
+                sys.stdout.flush()
 
     def _run(self):
         while not self._stop.wait(self.interval):
@@ -352,7 +371,8 @@ class Chat:
         # Reasoning makes answers better but on a slow PC it can take minutes: default it on
         # only when the machine is quick enough.
         self.reasons = info.get("reasons", True)   # model can think before answering (Qwen3/3.5...)
-        self.think = think if think is not None else (self.reasons and float(info.get("est_tps") or 0) >= 8)
+        self.think = think if think is not None else default_think(info)
+        self.show_thoughts = False   # reasoning runs quietly behind the status line unless asked
         self.speeds: List[float] = []
         self.stopped = False
         self.last = ""
@@ -389,14 +409,17 @@ class Chat:
 
     def ask(self, text: str) -> None:
         self.messages.append({"role": "user", "content": text})
-        prompt, dropped = trim_history(self.messages, self.ctx, self.max_tokens)
+        # thinking needs room for the reasoning *and* the answer
+        budget = max(self.max_tokens, self.ctx // 2) if (self.think and self.reasons) else self.max_tokens
+        prompt, dropped = trim_history(self.messages, self.ctx, budget)
         if dropped:
             print(dim(f"  (oldest {dropped} messages left out so the model has room to answer)"))
         state = {"kind": None}
         mark = Mark()
 
         def on_text(kind, chunk):
-            if kind == "think" and not self.think:
+            if kind == "think" and (not self.think or not self.show_thoughts):
+                mark.thought(chunk)     # the status line counts it; the text stays out of the way
                 return
             if kind != state["kind"]:
                 if state["kind"] is not None:
@@ -409,7 +432,7 @@ class Chat:
 
         mark.start("  ")   # the square starts moving the moment you press Enter
         try:
-            ans = stream(self.url, prompt, self.temperature, self.max_tokens,
+            ans = stream(self.url, prompt, self.temperature, budget,
                          self.think if self.reasons else None, on_text)
         except (urllib.error.URLError, ConnectionError, OSError) as e:
             mark.stop()
@@ -424,6 +447,9 @@ class Chat:
             self.last = ans.text
         else:
             self.messages.pop()
+            if ans.reasoning and not ans.stopped:
+                print(dim("  It used all its room thinking and never got to the answer. /think off answers "
+                          "directly; /thoughts shows the reasoning."))
         if ans.tps:
             self.speeds.append(ans.tps)
         stop = " · stopped" if ans.stopped else ""
@@ -445,6 +471,9 @@ class Chat:
             if arg:
                 self.messages.insert(0, {"role": "system", "content": arg})
             print(dim("  System prompt " + ("set." if arg else "cleared.")))
+        elif name in ("thoughts", "thought") and self.reasons:
+            self.show_thoughts = {"on": True, "off": False}.get(arg.lower(), not self.show_thoughts)
+            print(dim(f"  Reasoning text {'shown as it is written' if self.show_thoughts else 'hidden (the status line shows progress)'}."))
         elif name == "think" and not self.reasons:
             print(dim("  This model answers directly; it has no reasoning mode."))
         elif name == "think":
@@ -575,6 +604,36 @@ def _write_history(readline, hist: Path) -> None:
         pass
 
 
+def default_think(info: Dict) -> bool:
+    """Reason before answering only where it pays: a fast PC and a model big enough to reason
+    well (tiny models can spend minutes second-guessing a greeting)."""
+    if not info.get("reasons", True):
+        return False
+    params = info.get("params_b")
+    return float(info.get("est_tps") or 0) >= 8 and (params is None or params >= 3)
+
+
+def file_info(path: str, ctx: Optional[int] = None, est_tps: Optional[float] = None) -> Dict:
+    """Header details for any GGUF file (used when the running model isn't the set-up one)."""
+    from . import gguf
+    info = {"model": Path(path).stem, "ctx": ctx, "est_tps": est_tps, "where": "this PC"}
+    try:
+        g = gguf.read(path)
+        info.update(reasons=g.reasons, params_b=g.n_params / 1e9)
+    except (ValueError, OSError, EOFError):
+        info.update(reasons=True)
+    return info
+
+
+def running_info(status: Dict) -> Dict:
+    """Details of the model the server is actually running."""
+    active = status.get("active") or {}
+    path = status.get("model_path")
+    if not path or (active.get("path") and Path(active["path"]).resolve() == Path(path).resolve()):
+        return model_info(active)
+    return file_info(path, ctx=status.get("ctx"))
+
+
 def model_info(active: Optional[dict]) -> Dict:
     """Header details from the set-up model's plan."""
     if not active:
@@ -587,8 +646,9 @@ def model_info(active: Optional[dict]) -> Dict:
         name = Path(active.get("path", "model")).stem
     nodes = p.get("nodes")
     try:
-        reasons = "reasoning" in catalog.get(p.get("model", "")).tags
+        m = catalog.get(p.get("model", ""))
+        reasons, params = "reasoning" in m.tags, m.params_b
     except KeyError:
-        reasons = True
-    return {"model": name, "quant": p.get("quant", ""), "reasons": reasons, "ctx": active.get("settings", {}).get("ctx") or p.get("ctx"),
+        reasons, params = True, None
+    return {"model": name, "quant": p.get("quant", ""), "reasons": reasons, "params_b": params, "ctx": active.get("settings", {}).get("ctx") or p.get("ctx"),
             "where": f"{len(nodes)} computers" if nodes else "this PC", "est_tps": p.get("est_tps")}

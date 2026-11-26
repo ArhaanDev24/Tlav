@@ -9,7 +9,7 @@ import os
 import struct
 import urllib.request
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 GGUF_MAGIC = b"GGUF"
 
