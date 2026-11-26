@@ -15,8 +15,40 @@ from typing import List, Optional
 from . import config, runtime
 
 
+def port_free(host: str, port: int) -> bool:
+    """Can a server listen here? (Binding is the honest test: another program may be listening.)"""
+    import socket
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        s.bind(("0.0.0.0" if host == "0.0.0.0" else host, port))
+        return True
+    except OSError:
+        return False
+    finally:
+        s.close()
+
+
+def pick_port(host: str, port: int, tries: int = 20) -> int:
+    for p in range(port, port + tries):
+        if port_free(host, p):
+            return p
+    raise RuntimeError(f"Ports {port}-{port + tries - 1} are all in use; pass --port with a free one.")
+
+
 def start(args: List[str], wait: bool = True, timeout: int = 900, detach: bool = False) -> subprocess.Popen:
     exe = runtime.require("llama-server")
+    args = list(args)
+    if "--port" in args:
+        i = args.index("--port") + 1
+        host = args[args.index("--host") + 1] if "--host" in args else "127.0.0.1"
+        want = int(args[i])
+        got = pick_port(host, want)
+        if got != want:
+            # Something else (another AI app, an old Tlav) already uses the port. Never talk to it
+            # by mistake: start on the next free port instead.
+            print(f"  Port {want} is busy (another program uses it); Tlav will use {got}.")
+            args[i] = str(got)
     log = open(config.home() / "server.log", "w")
     kw = {}
     if detach:
@@ -34,7 +66,7 @@ def start(args: List[str], wait: bool = True, timeout: int = 900, detach: bool =
         while time.time() - t0 < timeout:
             if proc.poll() is not None:
                 raise RuntimeError(f"llama-server exited early; see {config.home() / 'server.log'}")
-            if healthy(url):
+            if healthy(url) and proc.poll() is None:
                 break
             time.sleep(1)
         else:
@@ -112,6 +144,12 @@ def pid_alive(pid: Optional[int]) -> bool:
         out = subprocess.run(["tasklist", "/FI", f"PID eq {pid}"], capture_output=True, text=True).stdout
         return str(pid) in out
     try:
+        # reap it if we started it ourselves (a finished child stays a "zombie" until reaped)
+        if os.waitpid(pid, os.WNOHANG)[0] == pid:
+            return False
+    except (ChildProcessError, OSError):
+        pass
+    try:
         os.kill(pid, 0)
         return True
     except OSError:
@@ -181,5 +219,12 @@ def stop() -> bool:
         subprocess.run(["taskkill", "/PID", str(pid), "/F"], capture_output=True)
     else:
         os.kill(pid, signal.SIGTERM)
+        # wait until it has really exited and freed its memory and port
+        for _ in range(100):
+            if not pid_alive(pid):
+                break
+            time.sleep(0.1)
+        else:
+            os.kill(pid, signal.SIGKILL)
     config.save_state(server_pid=None)
     return True
