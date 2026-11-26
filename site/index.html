@@ -115,6 +115,7 @@ code { font-family: var(--mono); font-size: .92em; }
 .sec { padding-block: clamp(96px, 12vw, 170px); }
 .sec.tint, .story.tint { background: var(--surface); }
 .story.tint .window, .story.tint .cand, .story.tint .msg.ai { background: var(--bg); }
+.story.tint .cand.win { background: var(--deep); }
 .split-head { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 24px; margin-bottom: clamp(48px, 6vw, 80px); align-items: end; }
 .split-head h2 { grid-column: 1 / span 7; font-size: clamp(44px, 6.2vw, 88px); }
 .split-head p { grid-column: 9 / span 4; color: var(--muted); font-size: 18px; max-width: 34ch; }
@@ -177,7 +178,7 @@ input[type=range]::-moz-range-thumb { width: 18px; height: 18px; background: var
 
 /* ---------- story (scroll-driven) ---------- */
 .story { position: relative; height: 420vh; }
-.story-pin { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 68px); height: calc(100svh - 68px - env(safe-area-inset-top, 0px)); display: flex; align-items: center; }
+.story-pin { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 68px); height: calc(100svh - 68px - env(safe-area-inset-top, 0px)); display: flex; align-items: center; isolation: isolate; overflow: hidden; }
 .story-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 24px; align-items: center; width: 100%; }
 .chapters { grid-column: 1 / span 4; display: grid; gap: 4px; counter-reset: ch; }
 .chapters h2 { font-size: clamp(36px, 4.4vw, 60px); margin-bottom: 28px; }
@@ -188,8 +189,17 @@ input[type=range]::-moz-range-thumb { width: 18px; height: 18px; background: var
 .chap.on { opacity: 1; }
 .chap.on span { max-height: 3em; }
 .progress { height: 2px; background: var(--line); margin-top: 18px; }
-.progress i { display: block; height: 100%; width: calc(var(--sp, 0) * 100%); background: var(--ink); }
-.window { grid-column: 6 / span 7; background: var(--surface); box-shadow: 0 1px 0 var(--line), 0 30px 80px rgba(23, 28, 19, .12); aspect-ratio: 16 / 11; display: flex; flex-direction: column; overflow: hidden; }
+.progress i { position: relative; display: block; height: 100%; width: calc(var(--sp, 0) * 100%); background: linear-gradient(90deg, var(--ink), var(--pixel)); }
+.progress i::after { content: ""; position: absolute; right: -4px; top: -3px; width: 8px; height: 8px; background: var(--pixel); box-shadow: 0 0 12px var(--pixel); }
+.chap.on b::after { content: ""; display: inline-block; width: 7px; height: 7px; margin-left: 10px; vertical-align: 3px; background: var(--pixel); animation: blink 1s steps(1) infinite; }
+.window { --rx: 0deg; --ry: 0deg; grid-column: 6 / span 7; background: var(--surface); aspect-ratio: 16 / 11; display: flex; flex-direction: column; overflow: hidden; position: relative;
+  box-shadow: 0 0 0 1px var(--line), 0 40px 90px -30px rgba(23, 28, 19, .28), 0 30px 120px -40px color-mix(in srgb, var(--pixel) 45%, transparent);
+  transform: perspective(1400px) rotateX(var(--rx)) rotateY(var(--ry)); transition: transform .5s var(--ease); will-change: transform; }
+.fx { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 5; }
+.scanline { position: absolute; left: 0; right: 0; top: 0; height: 2px; background: linear-gradient(90deg, transparent, var(--pixel), transparent); box-shadow: 0 0 18px 4px color-mix(in srgb, var(--pixel) 45%, transparent); animation: scan 2.6s linear infinite; }
+.scanline::after { content: ""; position: absolute; left: 0; right: 0; bottom: 2px; height: 60px; background: linear-gradient(0deg, color-mix(in srgb, var(--pixel) 10%, transparent), transparent); }
+@keyframes scan { from { top: 0; } to { top: 100%; } }
+.fresh { color: var(--pixel); text-shadow: 0 0 12px color-mix(in srgb, var(--pixel) 40%, transparent); }
 .win-bar { display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--line); font: 12px var(--mono); color: var(--muted); }
 .win-bar i { width: 9px; height: 9px; background: var(--line); }
 .win-bar i:first-child { background: var(--pixel); }
@@ -205,14 +215,15 @@ input[type=range]::-moz-range-thumb { width: 18px; height: 18px; background: var
 .meter i.on { background: var(--deep); }
 .meter.hot i.on { background: var(--pixel); }
 .cands { display: grid; gap: 6px; }
-.cand { display: grid; grid-template-columns: 1fr auto auto; gap: 16px; padding: 10px 14px; font-size: 15px; background: var(--bg); transition: opacity .35s, background-color .35s, color .35s; }
+.cand { display: grid; grid-template-columns: 1fr auto auto; gap: 16px; padding: 10px 14px; font-size: 15px; background: var(--bg); transition: opacity .5s var(--ease), transform .5s var(--ease), background-color .4s, color .4s, box-shadow .4s; }
 .cand span { font: 13px var(--mono); color: var(--muted); }
-.cand.out { opacity: .28; text-decoration: line-through; }
-.cand.win { background: var(--deep); color: var(--on-deep); }
+.cand.out { opacity: .22; text-decoration: line-through; transform: translateX(28px); }
+.cand.win { background: var(--deep); color: var(--on-deep); transform: scale(1.035); box-shadow: 0 0 0 2px var(--pixel), 0 16px 40px -12px color-mix(in srgb, var(--pixel) 70%, transparent); }
 .cand.win span { color: color-mix(in srgb, var(--on-deep) 70%, transparent); }
 .shrink { display: grid; grid-template-columns: auto 1fr; gap: 22px; align-items: center; }
 .block { display: grid; grid-template-columns: repeat(16, 10px); gap: 3px; }
-.block i { width: 10px; height: 10px; background: var(--deep); transition: background-color .25s; }
+.block i { width: 10px; height: 10px; background: var(--deep); transition: background-color .25s, transform .3s var(--ease); }
+.block i.gone { transform: scale(.4); }
 .block i.gone { background: transparent; box-shadow: inset 0 0 0 1px var(--line); }
 .big { font: 600 clamp(34px, 4vw, 56px)/1 var(--sans); letter-spacing: -0.05em; font-variant-numeric: tabular-nums; }
 .sub { font-size: 14px; color: var(--muted); }
@@ -301,7 +312,7 @@ footer a:hover { color: var(--ink); }
   .chapters h2 { font-size: 30px; margin-bottom: 4px; }
   .chap { display: none; padding: 8px 0; }
   .chap.on { display: grid; }
-  .window { aspect-ratio: auto; height: min(62svh, 520px); }
+  .window { aspect-ratio: auto; height: min(62svh, 520px); transform: none; }
   .field { width: 100%; height: 60%; }
 }
 @media (max-width: 720px) {
@@ -404,6 +415,7 @@ footer a:hover { color: var(--ink); }
 
   <section class="story tint" id="how" aria-labelledby="how-title">
     <div class="story-pin">
+      <canvas class="pfield bl" aria-hidden="true"></canvas>
       <div class="wrap story-grid">
         <div class="chapters">
           <span class="kicker">01 · How it works</span>
@@ -418,6 +430,7 @@ footer a:hover { color: var(--ink); }
           <div class="win-bar"><i></i><i></i><i></i><span>tlav setup</span><em id="winStatus">measuring…</em></div>
           <div class="win-body">
             <div class="scene" data-s="0">
+              <span class="scanline"></span>
               <div class="kv"><span>Memory</span><b id="m1">16 GB</b><div class="meter" id="mt1"></div></div>
               <div class="kv"><span>Processor</span><b>4 cores · AVX2</b><div class="meter" id="mt2"></div></div>
               <div class="kv"><span>Memory speed</span><b id="m3">16.2 GB/s</b><div class="meter hot" id="mt3"></div></div>
@@ -444,6 +457,7 @@ footer a:hover { color: var(--ink); }
               </div>
               <div class="stat-line"><span><b>3.2</b> tokens/s</span><span>Qwen3 8B · Q4_K_M</span><span>offline</span></div>
             </div>
+            <canvas class="fx" id="fx"></canvas>
           </div>
         </div>
       </div>
@@ -738,25 +752,94 @@ footer a:hover { color: var(--ink); }
   const cands = [...$("cands").children];
   const STORY_TEXT = "Your supplier has moved Friday's delivery to Monday and is offering 10% off the next order as an apology.";
   const statusTxt = ["measuring…", "choosing a model…", "compressing…", "ready · offline"];
-  let lastScene = -1;
+  let lastScene = -1, lastWin = false, lastKeep = 16, lastOk = false;
+
+  /* fx layer: pixel wipe between steps + particle bursts */
+  const fx = $("fx"), fg = fx.getContext("2d"), win = story.querySelector(".window");
+  let FW = 0, FH = 0, parts2 = [], wipeT = -1, fxOn = false;
+  const fxSize = () => { const r = fx.getBoundingClientRect(), dpr = Math.min(2, devicePixelRatio || 1); FW = r.width; FH = r.height; fx.width = FW * dpr; fx.height = FH * dpr; fg.setTransform(dpr, 0, 0, dpr, 0, 0); };
+  const rel = (el) => { const a = el.getBoundingClientRect(), b = fx.getBoundingClientRect(); return { x: a.left - b.left, y: a.top - b.top, w: a.width, h: a.height }; };
+  const burst = (x, y, n, spread = 1, up = 0) => {
+    if (reduced) return;
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * 6.28, s = (1 + Math.random() * 3) * spread;
+      parts2.push({ x, y, vx: Math.cos(a) * s + up * .6, vy: Math.sin(a) * s - up, life: 1, sz: 3 + Math.random() * 4, c: Math.random() < .75 ? col.px : col.soft });
+    }
+    wakeFx();
+  };
+  const fxDraw = (t) => {
+    fg.clearRect(0, 0, FW, FH);
+    if (wipeT >= 0) {
+      const C = 18, cols = Math.ceil(FW / C), rows = Math.ceil(FH / C), dur = 620, el = t - wipeT;
+      if (el > dur + 260) wipeT = -1;
+      else for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) {
+        const d = (x + y) / (cols + rows) * dur, k = (el - d) / 260;
+        if (k <= 0 || k >= 1) continue;
+        fg.globalAlpha = Math.sin(k * Math.PI) * .95; fg.fillStyle = (x * 7 + y * 3) % 5 ? col.px : col.soft;
+        const s = (C - 3) * Math.sin(k * Math.PI);
+        fg.fillRect(x * C + (C - s) / 2, y * C + (C - s) / 2, s, s);
+      }
+    }
+    parts2 = parts2.filter((q) => q.life > 0);
+    for (const q of parts2) {
+      q.x += q.vx; q.y += q.vy; q.vy += .05; q.vx *= .985; q.life -= .018;
+      fg.globalAlpha = Math.max(0, q.life); fg.fillStyle = q.c; fg.fillRect(Math.round(q.x), Math.round(q.y), Math.round(q.sz), Math.round(q.sz));
+    }
+    fg.globalAlpha = 1;
+  };
+  const fxLoop = (t) => { fxDraw(t); if (fxOn && (wipeT >= 0 || parts2.length)) requestAnimationFrame(fxLoop); else { fxOn = false; fxDraw(t); } };
+  const wakeFx = () => { if (!fxOn) { fxOn = true; requestAnimationFrame(fxLoop); } };
+  fxSize(); addEventListener("resize", fxSize);
+
+  /* gentle tilt toward the pointer */
+  const pin = story.querySelector(".story-pin");
+  if (!reduced && matchMedia("(pointer: fine)").matches) {
+    pin.addEventListener("pointermove", (e) => { const r = win.getBoundingClientRect(), x = (e.clientX - r.left) / r.width - .5, y = (e.clientY - r.top) / r.height - .5;
+      win.style.setProperty("--ry", (x * 6).toFixed(2) + "deg"); win.style.setProperty("--rx", (-y * 5).toFixed(2) + "deg"); });
+    pin.addEventListener("pointerleave", () => { win.style.setProperty("--ry", "0deg"); win.style.setProperty("--rx", "0deg"); });
+  }
+
   const setStory = (p) => {
     const n = scenes.length, idx = Math.min(n - 1, Math.floor(p * n)), sp = Math.min(1, (p * n) - idx);
     story.style.setProperty("--sp", p.toFixed(4));
     if (idx !== lastScene) {
       scenes.forEach((s, i) => s.classList.toggle("on", i === idx));
       chaps.forEach((c, i) => c.classList.toggle("on", i === idx));
+      if (lastScene !== -1 && !reduced) { wipeT = performance.now(); wakeFx(); }
       $("winStatus").textContent = statusTxt[idx]; lastScene = idx;
     }
-    if (idx === 0) meters.forEach((m, k) => [...m].forEach((c, i) => c.classList.toggle("on", i < Math.round(meterTo[k] * Math.min(1, sp * 1.6 - k * .2)))));
-    if (idx === 1) cands.forEach((c, i) => { const out = [0, 1, 3, 4]; const step = Math.floor(sp * 5); c.classList.toggle("out", out.includes(i) && out.indexOf(i) < step); c.classList.toggle("win", i === 2 && step >= 4); });
+    if (idx === 0) {
+      meters.forEach((m, k) => [...m].forEach((c, i) => c.classList.toggle("on", i < Math.round(meterTo[k] * Math.min(1, sp * 1.6 - k * .2)))));
+      $("m1").textContent = Math.max(1, Math.round(16 * Math.min(1, sp * 1.8))) + " GB";
+      $("m3").textContent = (16.2 * Math.max(.05, Math.min(1, sp * 1.6 - .4))).toFixed(1) + " GB/s";
+    }
+    if (idx === 1) {
+      const step = Math.floor(sp * 5), out = [0, 1, 3, 4];
+      cands.forEach((c, i) => { c.classList.toggle("out", out.includes(i) && out.indexOf(i) < step); c.classList.toggle("win", i === 2 && step >= 4); });
+      const won = step >= 4;
+      if (won && !lastWin) { const r = rel(cands[2]); burst(r.x + r.w / 2, r.y + r.h / 2, 46, 1.4); }
+      lastWin = won;
+    }
     if (idx === 2) {
       const k = Math.min(1, sp * 1.3), keepCols = Math.round(16 - k * 11);
       [...blockCells].forEach((c, i) => c.classList.toggle("gone", i % 16 >= keepCols));
+      if (keepCols < lastKeep) for (let cc = keepCols; cc < lastKeep; cc++) for (let row = 0; row < 10; row += 2) {
+        const r = rel(blockCells[row * 16 + cc]); burst(r.x + r.w / 2, r.y + r.h / 2, 2, .7, 1.2);
+      }
+      lastKeep = keepCols;
+      if (k >= 1 && !lastOk) { const r = rel($("qual")); burst(r.x + r.w, r.y + r.h / 2, 24, 1); }
+      lastOk = k >= 1;
       $("size").textContent = (16.4 - k * 11.5).toFixed(1) + " GB";
       $("qual").textContent = (100 - k * 2.5).toFixed(1) + "%";
       $("qok").textContent = k >= 1 ? "· check passed" : "";
     }
-    if (idx === 3) { const len = Math.round(STORY_TEXT.length * Math.min(1, sp * 1.4)); $("storyText").textContent = STORY_TEXT.slice(0, len); }
+    if (idx === 3) {
+      const len = Math.round(STORY_TEXT.length * Math.min(1, sp * 1.4)), cut = Math.max(0, len - 10), out = $("storyText");
+      out.textContent = STORY_TEXT.slice(0, cut);
+      if (len > cut) { const f = document.createElement("span"); f.className = "fresh"; f.textContent = STORY_TEXT.slice(cut, len); out.appendChild(f); }
+    }
+    if (idx !== 2) { lastKeep = 16; lastOk = false; }
+    if (idx !== 1) lastWin = false;
   };
   const storyProgress = () => { const r = story.getBoundingClientRect(), total = r.height - innerHeight; return Math.max(0, Math.min(.999, -r.top / Math.max(1, total))); };
   if (reduced) { scenes.forEach((s) => s.classList.add("on")); chaps.forEach((c) => c.classList.add("on")); meters.forEach((m, k) => [...m].forEach((c, i) => c.classList.toggle("on", i < meterTo[k])));
