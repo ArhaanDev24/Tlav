@@ -20,9 +20,14 @@ from . import catalog
 from .catalog import KV_BYTES, Model, Quant
 from .hardware import Hardware
 
-RUNTIME_OVERHEAD_GB = 0.4      # llama.cpp buffers, compute graph (per machine)
-CONTEXT_CHOICES = (8192, 4096, 2048)
-MIN_CTX = 2048
+RUNTIME_OVERHEAD_GB = 0.4      # llama.cpp buffers, compute graph (per machine, cluster plans)
+CONTEXT_CHOICES = (8192, 4096, 2048, 1024)
+MIN_CTX = 1024                 # 1024 tokens is still a usable chat on a 2 GB machine
+
+
+def overhead_gb(model: Model) -> float:
+    """Compute buffers scale with model size: tiny models need far less than 0.4 GB."""
+    return min(RUNTIME_OVERHEAD_GB, 0.15 + 0.05 * model.params_b)
 RPC_ROUNDTRIPS_PER_TOKEN = 4   # graph compute + tensor get/set per remote machine per token
 RPC_FIXED_MS_PER_TOKEN = 2.0   # serialization/scheduling cost per remote machine per token
 DEFAULT_KV = "q8_0"            # halves context memory; quality impact is negligible (verified by --kv-check)
@@ -33,10 +38,15 @@ def ram_budget_gb(hw: Hardware) -> float:
     if hw.gpu == "cuda" and hw.gpu_vram_gb:
         # with CUDA we offload to VRAM and spill the rest into RAM
         return hw.gpu_vram_gb * 0.9 + max(0.0, hw.ram_total_gb * 0.6 - 2.0)
-    reserve = max(2.0, hw.ram_total_gb * 0.25)
+    if hw.ram_total_gb >= 6:
+        reserve = max(2.0, hw.ram_total_gb * 0.25)
+    else:
+        # Small machines (2-4 GB netbooks, old laptops) usually run a light OS:
+        # keep ~30% for it instead of a flat 2 GB, or nothing would ever fit.
+        reserve = max(0.7, hw.ram_total_gb * 0.3)
     if hw.os_name == "macOS":
-        reserve += 1.0  # macOS (WindowServer, Spotlight...) is heavier than a minimal Linux
-    return max(0.5, hw.ram_total_gb - reserve)
+        reserve += 1.0 if hw.ram_total_gb >= 6 else 0.5  # macOS is heavier than a minimal Linux
+    return max(0.25, hw.ram_total_gb - reserve)
 
 
 @dataclass
@@ -135,7 +145,7 @@ def evaluate_nodes(model: Model, quant: Quant, nodes: List[Node], task: str = "c
         ctx = min(ctx, model.max_ctx)
         need = weights + model.kv_cache_gb(ctx, KV_BYTES[kv])
         if len(nodes) == 1:
-            mem = need + RUNTIME_OVERHEAD_GB
+            mem = need + overhead_gb(model)
             if mem <= main.budget:
                 tps = _cluster_tps(model, quant, nodes, [1.0])
                 return Plan(model, quant, ctx, mem, tps, model.score(task) * quant.retention, kv,

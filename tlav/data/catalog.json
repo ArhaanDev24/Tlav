@@ -1,6 +1,9 @@
 {
   "_note": "quality is an approximate 0-100 capability score (blend of public benchmarks) used only for ranking. layers/kv_heads/head_dim size the KV cache. active_params_b < params_b means mixture-of-experts: only the active part is read per token, so it is much faster than its size suggests.",
   "models": [
+    {"id": "smollm2-360m", "name": "SmolLM2 360M", "repo": "bartowski/SmolLM2-360M-Instruct-GGUF", "params_b": 0.362, "layers": 32, "kv_heads": 5, "head_dim": 64, "max_ctx": 8192, "quality": {"chat": 36, "code": 28}, "tags": ["chat", "tiny"]},
+    {"id": "gemma-3-1b",   "name": "Gemma 3 1B",   "repo": "bartowski/google_gemma-3-1b-it-GGUF", "params_b": 1.0, "layers": 26, "kv_heads": 1, "head_dim": 256, "max_ctx": 32768, "quality": {"chat": 50, "code": 40}, "tags": ["chat", "tiny"]},
+    {"id": "smollm2-1.7b", "name": "SmolLM2 1.7B", "repo": "bartowski/SmolLM2-1.7B-Instruct-GGUF", "params_b": 1.711, "layers": 24, "kv_heads": 32, "head_dim": 64, "max_ctx": 8192, "quality": {"chat": 51, "code": 42}, "tags": ["chat", "tiny"]},
     {"id": "qwen3-0.6b",  "name": "Qwen3 0.6B",  "repo": "bartowski/Qwen_Qwen3-0.6B-GGUF",  "params_b": 0.75, "layers": 28, "kv_heads": 8, "head_dim": 128, "max_ctx": 32768,  "quality": {"chat": 45, "code": 40}, "tags": ["chat", "reasoning"]},
     {"id": "qwen3-1.7b",  "name": "Qwen3 1.7B",  "repo": "bartowski/Qwen_Qwen3-1.7B-GGUF",  "params_b": 2.03, "layers": 28, "kv_heads": 8, "head_dim": 128, "max_ctx": 32768,  "quality": {"chat": 58, "code": 55}, "tags": ["chat", "reasoning"]},
     {"id": "qwen3-4b",    "name": "Qwen3 4B",    "repo": "bartowski/Qwen_Qwen3-4B-GGUF",    "params_b": 4.02, "layers": 36, "kv_heads": 8, "head_dim": 128, "max_ctx": 32768,  "quality": {"chat": 68, "code": 66}, "tags": ["chat", "reasoning", "code"], "draft": "qwen3-0.6b"},

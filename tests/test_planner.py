@@ -66,6 +66,13 @@ def test_best_quant_for_prefers_least_compression():
     assert small is not None and small.quant.bpw < 8.5
 
 
-def test_too_small_machine_returns_none_or_tiny():
-    best = planner.best(hardware.simulated(2), 16.0)
-    assert best is None or best.model.params_b < 1
+def test_low_ram_machines_get_a_tiny_model():
+    # 2 GB netbook with a light Linux: a ~1B model, compressed, short context
+    two = planner.best(hardware.simulated(2, os_name="Linux"), 6.0)
+    assert two is not None and two.model.params_b <= 1.6 and two.memory_gb <= planner.ram_budget_gb(hardware.simulated(2, os_name="Linux"))
+    three = planner.best(hardware.simulated(3, os_name="Linux"), 6.0)
+    assert three is not None and three.model.params_b > two.model.params_b
+
+
+def test_one_gb_is_honestly_too_small():
+    assert planner.best(hardware.simulated(1, os_name="Linux"), 6.0) is None

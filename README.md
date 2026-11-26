@@ -56,6 +56,8 @@ Typical picks for a 2013 iMac (quad-core Haswell, DDR3-1600):
 
 | Setup | Best pick | RAM used | Speed |
 |---|---|---|---|
+| 2 GB (light Linux) | Gemma 3 1B or Qwen2.5 1.5B @ Q4_K_M | ~0.6–1.2 GB | ~5–10 tok/s |
+| 4 GB | Qwen2.5 3B @ Q4_K_M | ~2.2 GB | ~3 tok/s |
 | 8 GB | Qwen2.5 7B @ Q4_K_M | ~4.9 GB | ~3–4 tok/s |
 | 16 GB | Qwen3 8B @ Q4_K_M (+ draft model) | ~7 GB | ~3 tok/s, more with speculative decoding |
 | 32 GB | Qwen3 30B-A3B (MoE) @ Q5_K_M | ~21 GB | ~6–7 tok/s |
