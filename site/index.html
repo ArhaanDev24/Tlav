@@ -187,11 +187,25 @@ input[type=range]::-moz-range-thumb { width: 18px; height: 18px; background: var
 .vrow i { position: relative; height: 8px; background: var(--line); }
 .vrow i::after { content: ""; position: absolute; inset: 0 auto 0 0; width: var(--w); background: var(--deep); transition: width 1.1s var(--ease); transition-delay: calc(var(--d) * .4s + .2s); }
 .vrow i.hot::after { background: var(--pixel); }
-.vm { display: flex; justify-content: space-between; gap: 10px; padding: 9px 11px; background: var(--bg); transition: opacity .7s, background-color .7s, color .7s; transition-delay: calc(var(--d) * .4s + .5s); }
-.vm span { font: 12px var(--mono); color: var(--muted); }
-.vm.out { opacity: .4; text-decoration: line-through; }
-.vm.win { background: var(--deep); color: #f3f6ee; box-shadow: inset 0 0 0 1px var(--pixel); }
-.vm.win span { color: #f3a98a; }
+.vchoose { gap: 8px; }
+.vcount { font: 12px var(--mono); color: var(--muted); }
+.vcount b { color: var(--ink); font-weight: 500; }
+.vfit { position: relative; display: grid; gap: 4px; padding-top: 16px; }
+.vbudget { position: absolute; top: 0; left: calc(10px + (100% - 20px) * var(--b)); transform: translateX(-50%); font: 10px var(--mono); color: var(--muted); white-space: nowrap; }
+.vfrow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 5px 8px; padding: 7px 10px; background: var(--bg); transition: opacity .7s, background-color .7s, color .7s, box-shadow .7s; transition-delay: calc(var(--d) * .4s + 1.7s); }
+.vfrow span { font-weight: 500; }
+.vfrow em { font: normal 11px var(--mono); color: var(--muted); white-space: nowrap; transition: color .7s; transition-delay: inherit; }
+.vbar { grid-column: 1 / -1; position: relative; height: 5px; background: var(--line); }
+.vbar::after { content: ""; position: absolute; inset: 0 auto 0 0; width: var(--w); background: var(--deep); transition: width .9s var(--ease); transition-delay: calc(var(--d) * .4s + .5s + var(--r) * .12s); }
+.vbar::before { content: ""; position: absolute; top: -4px; bottom: -4px; left: calc(var(--b) * 100%); border-left: 1px dashed var(--ink); opacity: .55; z-index: 1; }
+.vfrow.win .vbar::before { border-color: #f3f6ee; }
+.vbar s { position: absolute; top: 0; bottom: 0; left: var(--w); width: var(--o); background: var(--pixel); transition: width .6s var(--ease); transition-delay: calc(var(--d) * .4s + 1.2s); }
+.vfrow.out { opacity: .42; }
+.vfrow.win { background: var(--deep); color: #f3f6ee; box-shadow: inset 0 0 0 1px var(--pixel); }
+.vfrow.win em { color: #f3a98a; }
+.vfrow.win .vbar { background: rgba(243, 246, 238, .22); }
+.vfrow.win .vbar::after { background: #f3a98a; }
+.vwhy { font-size: 12px; color: var(--muted); transition: opacity .6s; transition-delay: calc(var(--d) * .4s + 2.2s); }
 .vblock { display: grid; grid-template-columns: repeat(8, 12px); gap: 3px; }
 .vblock i { width: 12px; height: 12px; background: var(--deep); transition: opacity .6s, transform .6s var(--ease); transition-delay: calc(var(--d) * .4s + var(--c) * 70ms + .3s); }
 .vblock i.cut { opacity: .12; transform: scale(.5); }
@@ -205,10 +219,13 @@ input[type=range]::-moz-range-thumb { width: 18px; height: 18px; background: var
 .vmeta b { color: var(--pixel); font-weight: 500; }
 /* before the cards play (only when scripts run) */
 .js .wsteps:not(.play) .vrow i::after { width: 0; }
-.js .wsteps:not(.play) .vm.out { opacity: 1; text-decoration: none; }
-.js .wsteps:not(.play) .vm.win { background: var(--bg); color: var(--ink); box-shadow: none; }
-.js .wsteps:not(.play) .vm.win span { color: var(--muted); }
 .js .wsteps:not(.play) .vblock i.cut { opacity: 1; transform: none; }
+.js .wsteps:not(.play) .vbar::after, .js .wsteps:not(.play) .vbar s { width: 0; }
+.js .wsteps:not(.play) .vfrow { opacity: 1; background: var(--bg); color: var(--ink); box-shadow: none; }
+.js .wsteps:not(.play) .vfrow em { color: var(--muted); }
+.js .wsteps:not(.play) .vfrow .vbar { background: var(--line); }
+.js .wsteps:not(.play) .vfrow .vbar::after { background: var(--deep); }
+.js .wsteps:not(.play) .vwhy { opacity: 0; }
 /* chat message styles shared with "Feel the speed" */
 .chatlog { display: grid; gap: 12px; align-content: end; }
 .msg { max-width: 82%; padding: 12px 16px; font-size: 15px; line-height: 1.5; white-space: pre-line; }
@@ -398,11 +415,16 @@ footer a:hover { color: var(--ink); }
           </div>
         </article>
         <article class="wcard" style="--d:1">
-          <span class="wnum">02</span><h3>Chooses</h3><p>The strongest model that runs smoothly.</p>
-          <div class="viz" aria-label="Qwen3 8B chosen; Qwen3 14B too big, Llama 3.2 3B weaker">
-            <div class="vm out">Qwen3 14B<span>too big</span></div>
-            <div class="vm win">Qwen3 8B<span>best fit</span></div>
-            <div class="vm out">Llama 3.2 3B<span>weaker</span></div>
+          <span class="wnum">02</span><h3>Chooses</h3><p>The strongest model your RAM can hold, at a speed you can read.</p>
+          <div class="viz vchoose" aria-label="Checked 51 models. Qwen3.5 9B chosen: fits 11 GB at 3.5 tokens per second. Qwen3.5 27B too big, Qwen3.5 4B less capable.">
+            <div class="vcount" aria-hidden="true">Checked <b id="vcnt">51</b> models</div>
+            <div class="vfit" style="--b:.61" aria-hidden="true">
+              <span class="vbudget">your 11 GB</span>
+              <div class="vfrow out" style="--r:0"><span>Qwen3.5 27B</span><em>17 GB · too big</em><i class="vbar" style="--w:61%"><s style="--o:33%"></s></i></div>
+              <div class="vfrow win" style="--r:1"><span>Qwen3.5 9B</span><em>6.7 GB · 3.5 t/s</em><i class="vbar" style="--w:37%"></i></div>
+              <div class="vfrow out" style="--r:2"><span>Qwen3.5 4B</span><em>3.9 GB · less capable</em><i class="vbar" style="--w:22%"></i></div>
+            </div>
+            <div class="vwhy">Biggest that fits, at reading speed.</div>
           </div>
         </article>
         <article class="wcard" style="--d:2">
@@ -417,7 +439,7 @@ footer a:hover { color: var(--ink); }
           <div class="viz">
             <div class="vmsg me">Summarise this email</div>
             <div class="vmsg ai" id="vtype">Friday's delivery moved to Monday, with 10% off the next order.</div>
-            <div class="vmeta"><b>3.2</b> tok/s · offline</div>
+            <div class="vmeta"><b>3.5</b> tok/s · offline</div>
           </div>
         </article>
       </div>
@@ -741,6 +763,9 @@ footer a:hover { color: var(--ink); }
   const playSteps = () => {
     wsteps.classList.add("play");
     if (reduced) return;
+    const vcnt = $("vcnt"), N = +vcnt.textContent, t0 = performance.now() + 300;
+    const count = (now) => { const k = Math.min(1, Math.max(0, (now - t0) / 1200)); vcnt.textContent = Math.round(N * (1 - Math.pow(1 - k, 3))); if (k < 1) requestAnimationFrame(count); };
+    vcnt.textContent = "0"; requestAnimationFrame(count);
     vtype.textContent = ""; let n = 0;
     setTimeout(() => { const iv = setInterval(() => { n += 2; vtype.textContent = VTEXT.slice(0, n); if (n >= VTEXT.length) clearInterval(iv); }, 45); }, 1700);
   };
