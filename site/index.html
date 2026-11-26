@@ -18,12 +18,11 @@
   --muted: #4f5948;
   --line: #cfd8c5;
   --dot: #bfc9b2;
-  --deep: #2b5536;        /* forest: model share, highlights */
+  --deep: #24402c;        /* forest, a darker step of the hero ground */
   --night: #14261a;       /* hero ground */
-  --night-2: #1e3a27;
   --on-deep: #f3f6ee;
   --pixel: #ff6d3a;       /* signal orange */
-  --pixel-soft: #ffd2bf;
+  --pixel-soft: #f5c9b6;
   --sys: #b3bca6;
   --display: "Space Grotesk", "Inter Tight", "Helvetica Neue", Arial, sans-serif;
   --sans: "Inter Tight", "Helvetica Neue", Helvetica, Arial, sans-serif;
@@ -240,7 +239,7 @@ input[type=range]::-moz-range-thumb { width: 18px; height: 18px; background: var
 .chatbox .chatlog { flex: 1; align-content: start; padding: clamp(18px, 3vw, 28px); gap: 14px; }
 .chatbox .msg { font-size: 16px; }
 .chatbox .msg.me { background: var(--pixel); color: var(--night); font-weight: 500; }
-.chatbox .msg.ai { background: var(--night-2); color: var(--ink); max-width: 88%; }
+.chatbox .msg.ai { background: color-mix(in srgb, var(--night) 82%, #ffffff); color: var(--ink); max-width: 88%; }
 .cstats { display: grid; grid-template-columns: repeat(3, auto) minmax(0, 1fr) auto; gap: 22px; align-items: center; padding: 14px 18px; border-top: 1px solid var(--line); }
 .cstats div { display: grid; gap: 1px; }
 .cstats b { font: 600 22px/1 var(--display); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
