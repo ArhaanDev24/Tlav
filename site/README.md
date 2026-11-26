@@ -8,7 +8,7 @@ A single self-contained page (`index.html`): CSS, a canvas pixel field and vanil
 
 ## What's on it
 A minimal page in one sage palette:
-- **Hero:** letter-by-letter headline, blinking pixel cursor, a pixel field with ripples from the pixel arrow (click to make your own), scroll parallax.
+- **Hero:** letter-by-letter headline, blinking pixel cursor, and a pixel sculpture that assembles into a chip, an upward arrow and "AI" in turn (pixels dodge the cursor; click to scatter them), over a pixel field that ripples on each change.
 - **Watch it work:** a scroll-driven story where a Tlav window measures the machine, picks a model, compresses it and answers.
 - **What can your computer run?** memory slider using the same catalog and formulas as `tlav/planner.py`.
 - **Feel the speed:** pick a question and watch an example reply stream at the measured speed of a 16 GB desktop or a 4 GB laptop.
