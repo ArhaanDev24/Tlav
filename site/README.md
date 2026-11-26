@@ -1,23 +1,19 @@
 # Tlav website
 
-A single self-contained page (`index.html`): inline SVG artwork, CSS and vanilla JavaScript, no build step. The only external request is the Inter / Inter Tight / JetBrains Mono fonts from Google Fonts.
+A single self-contained page (`index.html`): CSS, a canvas pixel field and vanilla JavaScript, no build step. The only external request is Google Fonts (Inter Tight, JetBrains Mono, Silkscreen).
 
-**Preview locally:** open `index.html` in a browser, or run `python3 -m http.server -d site` and visit http://localhost:8000.
+**Preview locally:** open `index.html`, or run `python3 -m http.server -d site` and visit http://localhost:8000.
 
-**Host it:**
-- **GitHub Pages:** Settings → Pages → deploy from branch `main`, folder `/site`. (Pages on a private repo needs a paid GitHub plan; otherwise make the repo public or use one of the options below.)
-- **Netlify / Cloudflare Pages / Vercel:** drag the `site` folder in, or point the project at it with no build command.
+**Host it:** Netlify / Cloudflare Pages / Vercel (drag in the `site` folder, no build command), or GitHub Pages from `/site` (needs a public repo or a paid plan for private repos).
 
-**Five style directions** are built in. A picker at the bottom of the page switches them live, and a link like `index.html#style-3` opens a specific one:
+## What's on it
+- Pixel dot-grid hero with a stepped pixel arrow.
+- Scroll-driven "your old pc can think" type wall.
+- **"What can your computer run?"** tool: pick RAM, OS and one or two computers, and it shows the model Tlav would choose, its compression, speed, context and a memory map. It uses the same catalog and formulas as `tlav/planner.py` (checked to give identical picks); typical speeds per RAM size are assumptions, and the real tool measures them.
+- How it works, cluster layer split, measured results, a terminal example, slogans and install commands.
 
-| # | Name | Palette |
-|---|---|---|
-| 1 | Lavender Grid | soft lilac, indigo ink, magenta pixels |
-| 2 | Cloud Cobalt | pale sky, cobalt type, rose pixels |
-| 3 | Mint Static | fresh mint, deep teal, orchid pixels |
-| 4 | Soft Dusk | gentle dark mode, periwinkle, pink pixels |
-| 5 | Sorbet | blush ground, violet type, magenta pixels |
+## Colours
+Three palettes, switchable in the footer or by link: `#palette-aluminium` (default), `#palette-sage`, `#palette-night`.
 
-Once one is chosen, set it as the default in the script (`apply(... "1" ...)`) and remove the dock.
-
-Sections: pixel dot-grid hero with a stepped pixel arrow, scroll-driven "your old pc can think" type wall, sticky how-it-works story on a pixel-art iMac, pixel-art cluster diagram, measured results, terminal demo, slogans and install commands. Animations respect `prefers-reduced-motion`.
+## Keeping the tool in sync
+The catalog in the page is generated from `tlav/data/catalog.json`. After changing the catalog, regenerate the `MODELS` and `QUANTS` arrays in the script (see the comment there).
