@@ -45,7 +45,7 @@ h1, h2, h3 { font-family: var(--display); font-weight: 600; letter-spacing: -0.0
 p { margin: 0; }
 code { font-family: var(--mono); font-size: .92em; }
 .wrap { max-width: 1240px; margin-inline: auto; padding-left: var(--gl); padding-right: var(--gr); }
-.eyebrow { font: 500 13px/1 var(--mono); letter-spacing: .02em; color: var(--muted); }
+.eyebrow { font: 500 14px/1.2 var(--sans); color: var(--muted); }
 :focus-visible { outline: 2px solid var(--pixel); outline-offset: 3px; }
 .px { shape-rendering: crispEdges; }
 
@@ -106,14 +106,14 @@ code { font-family: var(--mono); font-size: .92em; }
 @keyframes fade { from { opacity: 0; transform: translateY(18px); } }
 .morph { position: relative; width: clamp(170px, 21vw, 300px); align-self: center; transform: translateY(calc(var(--hp) * -70px)); pointer-events: auto; }
 .morph canvas { display: block; width: 100%; aspect-ratio: 1; cursor: pointer; touch-action: pan-y; }
-.morph figcaption { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 14px; font: 500 12px var(--mono); color: var(--muted); }
+.morph figcaption { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 14px; font: 500 13px var(--sans); color: var(--muted); }
 .morph figcaption b { color: var(--ink); font-weight: 500; transition: opacity .3s; }
 .morph .dots { display: flex; gap: 6px; }
 .morph .dots i { width: 6px; height: 6px; background: var(--line); transition: background-color .3s; }
 .morph .dots i.on { background: var(--pixel); }
 .js .morph figcaption { animation: fade 1s var(--ease) 1.4s both; }
 @keyframes pop { to { opacity: 1; } }
-.cue { position: absolute; z-index: 2; left: 50%; bottom: calc(26px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); display: grid; justify-items: center; gap: 10px; font: 500 12px var(--mono); color: var(--muted); text-decoration: none; opacity: calc(1 - var(--hp) * 3); }
+.cue { position: absolute; z-index: 2; left: 50%; bottom: calc(26px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); display: grid; justify-items: center; gap: 10px; font: 500 12px var(--sans); color: var(--muted); text-decoration: none; opacity: calc(1 - var(--hp) * 3); }
 .cue i { position: relative; width: 2px; height: 44px; background: var(--line); overflow: hidden; }
 .cue i::after { content: ""; position: absolute; left: -2px; bottom: 0; width: 6px; height: 10px; background: var(--pixel); }
 
@@ -134,9 +134,6 @@ code { font-family: var(--mono); font-size: .92em; }
 .js .reveal.pre { transform: translateY(28px); opacity: 0; }
 
 /* ---------- section label + textures ---------- */
-.kicker { display: inline-flex; align-items: center; gap: 10px; margin-bottom: 22px; font: 500 13px var(--mono); color: var(--muted); }
-.kicker::before { content: ""; width: 8px; height: 8px; background: var(--pixel); }
-.split-head .kicker { grid-column: 1 / -1; margin-bottom: -6px; }
 .textured { position: relative; isolation: isolate; }
 .textured::before { content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
   background-image: radial-gradient(var(--dot) 1.2px, transparent 1.6px); background-size: 22px 22px;
@@ -186,7 +183,7 @@ input[type=range]::-moz-range-thumb { width: 18px; height: 18px; background: var
 /* ---------- watch it work: four step cards, each plays once ---------- */
 .wsteps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
 .wcard { display: grid; grid-template-rows: auto auto auto 1fr; gap: 8px; padding: 22px 0 0; border-top: 1px solid var(--ink); min-width: 0; }
-.wnum { font: 500 12px var(--mono); color: var(--pixel); }
+.wnum { font: 600 14px var(--sans); color: var(--pixel); }
 .wcard h3 { font-size: 26px; }
 .wcard > p { font-size: 15px; color: var(--muted); }
 .viz { margin-top: 14px; padding: 16px; background: var(--bg); display: grid; gap: 10px; align-content: center; min-height: 150px; font-size: 13px; }
@@ -228,7 +225,7 @@ input[type=range]::-moz-range-thumb { width: 18px; height: 18px; background: var
 /* ---------- try it (chat demo) ---------- */
 .demo { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 24px; align-items: stretch; }
 .prompts { grid-column: 1 / span 4; display: grid; gap: 8px; align-content: start; }
-.plabel { font: 500 12px var(--mono); color: var(--muted); margin: 4px 0 2px; }
+.plabel { font: 500 14px var(--sans); color: var(--muted); margin: 4px 0 2px; }
 .plabel + .plabel, .device + .plabel { margin-top: 18px; }
 .prompts > button { display: flex; align-items: center; justify-content: space-between; gap: 12px; text-align: left; padding: 15px 16px; border: 0; background: var(--bg); box-shadow: 0 0 0 1px var(--line); color: var(--ink); font: 500 16px var(--sans); cursor: pointer; transition: box-shadow .2s, background-color .2s, transform .2s var(--ease); }
 .prompts > button svg { width: 11px; height: 11px; flex: none; opacity: .35; transition: opacity .2s, transform .3s var(--ease); }
@@ -238,7 +235,7 @@ input[type=range]::-moz-range-thumb { width: 18px; height: 18px; background: var
 .prompts > button[aria-pressed="true"] svg { opacity: 1; color: var(--pixel); }
 .device { display: grid; grid-template-columns: 1fr 1fr; box-shadow: 0 0 0 1px var(--line); background: var(--bg); }
 .device button { padding: 11px 10px; border: 0; background: transparent; color: var(--muted); font: 500 14px var(--sans); cursor: pointer; display: grid; gap: 2px; text-align: left; }
-.device button small { font: 11px var(--mono); }
+.device button small { font-size: 12px; opacity: .75; }
 .device button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
 .chatwrap { grid-column: 6 / span 7; min-width: 0; display: flex; flex-direction: column; }
 .chatbox { --ink: #eef3e8; --muted: #a9b8a3; --line: #2c4433; flex: 1; display: flex; flex-direction: column; min-height: 440px; background: var(--night); color: var(--ink); }
@@ -254,7 +251,7 @@ input[type=range]::-moz-range-thumb { width: 18px; height: 18px; background: var
 .cstats { display: grid; grid-template-columns: repeat(3, auto) minmax(0, 1fr) auto; gap: 22px; align-items: center; padding: 14px 18px; border-top: 1px solid var(--line); }
 .cstats div { display: grid; gap: 1px; }
 .cstats b { font: 600 22px/1 var(--display); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
-.cstats div > span { font: 11px var(--mono); color: var(--muted); }
+.cstats div > span { font-size: 12px; color: var(--muted); }
 .cstats #dTps { color: var(--pixel); }
 .speedo { display: grid !important; grid-template-columns: repeat(24, minmax(0, 1fr)); gap: 3px; }
 .speedo i { aspect-ratio: 1; background: var(--line); transition: background-color .2s; }
@@ -283,7 +280,7 @@ input[type=range]::-moz-range-thumb { width: 18px; height: 18px; background: var
 .num b small { font-size: .36em; letter-spacing: -0.02em; margin-left: 4px; color: var(--pixel); font-weight: 500; }
 .num p { color: var(--muted); max-width: 30ch; }
 .chart { display: grid; gap: 12px; margin-top: 10px; padding: 18px 0 0; border-top: 1px dashed var(--line); }
-.bar { display: grid; grid-template-columns: 5.6em minmax(0, 1fr) 5.2em; gap: 14px; align-items: center; font: 12px var(--mono); color: var(--muted); }
+.bar { display: grid; grid-template-columns: 5.6em minmax(0, 1fr) 5.2em; gap: 14px; align-items: center; font-size: 13px; color: var(--muted); }
 .bar .val { text-align: right; color: var(--ink); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .bar .track { height: 10px; background: var(--line); position: relative; }
 .bar .track i { position: absolute; inset: 0 auto 0 0; width: var(--w); background: var(--sys); transform-origin: left; transition: transform 1.2s var(--ease) .2s; }
@@ -397,7 +394,6 @@ footer a:hover { color: var(--ink); }
   <section class="sec tint" id="how" aria-labelledby="how-title">
     <div class="wrap">
       <div class="split-head reveal">
-        <span class="kicker">01 · How it works</span>
         <h2 id="how-title">Watch it work.</h2>
         <p>One command, <code>tlav setup</code>, does four things in order.</p>
       </div>
@@ -440,7 +436,6 @@ footer a:hover { color: var(--ink); }
   <section class="sec textured" id="fit" aria-labelledby="fit-title">
     <div class="wrap">
       <div class="split-head reveal">
-        <span class="kicker">02 · Your machine</span>
         <h2 id="fit-title">What can your computer run?</h2>
         <p>Set your memory. Tlav picks the strongest model that still runs smoothly.</p>
       </div>
@@ -470,7 +465,6 @@ footer a:hover { color: var(--ink); }
   <section class="sec tint textured left" id="try" aria-labelledby="try-title">
     <div class="wrap">
       <div class="split-head reveal">
-        <span class="kicker">03 · Try it</span>
         <h2 id="try-title">Feel the speed.</h2>
         <p>Pick a question. The reply streams at the speed a real old computer produces it.</p>
       </div>
@@ -507,7 +501,6 @@ footer a:hover { color: var(--ink); }
   <section class="sec" id="cluster" aria-labelledby="cluster-title">
     <div class="wrap">
       <div class="split-head reveal">
-        <span class="kicker">04 · Cluster</span>
         <h2 id="cluster-title">Two computers. One bigger mind.</h2>
         <p>Link a spare machine and Tlav splits the model across both, so their memory adds up.</p>
       </div>
@@ -521,7 +514,6 @@ footer a:hover { color: var(--ink); }
   <section class="sec tint" id="results" aria-labelledby="results-title">
     <div class="wrap">
       <div class="split-head reveal">
-        <span class="kicker">05 · Measured</span>
         <h2 id="results-title">Less memory. Same answers.</h2>
         <p>Results from Tlav's own test runs.</p>
       </div>
