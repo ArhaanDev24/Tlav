@@ -67,13 +67,13 @@ code { font-family: var(--mono); font-size: .92em; }
 .mobile-menu a { padding: 16px 0; font-size: 22px; letter-spacing: -0.02em; text-decoration: none; border-bottom: 1px solid var(--line); }
 
 /* ---------- hero ---------- */
-.hero { --hp: 0; position: relative; overflow: hidden; min-height: calc(100svh - 68px - env(safe-area-inset-top, 0px)); display: flex; flex-direction: column; justify-content: center; padding-block: clamp(56px, 8vw, 110px) clamp(90px, 10vw, 140px); }
+.hero { --hp: 0; position: relative; overflow: hidden; min-height: min(calc(100svh - 68px - env(safe-area-inset-top, 0px)), 760px); display: flex; flex-direction: column; justify-content: center; padding-block: clamp(56px, 8vw, 110px) clamp(90px, 10vw, 140px); }
 .field { position: absolute; inset: 0; cursor: crosshair; }
-.field canvas { width: 100%; height: 100%; display: block; -webkit-mask-image: radial-gradient(120% 110% at 100% 0%, #000 30%, transparent 75%); mask-image: radial-gradient(120% 110% at 100% 0%, #000 30%, transparent 75%); }
+.field canvas { width: 100%; height: 100%; display: block; -webkit-mask-image: radial-gradient(90% 90% at 100% 0%, #000 15%, transparent 65%); mask-image: radial-gradient(90% 90% at 100% 0%, #000 15%, transparent 65%); }
 .hero .wrap { position: relative; z-index: 2; width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 32px; align-items: end; pointer-events: none; }
 .hero .wrap a, .hero .wrap button { pointer-events: auto; }
-.hero h1 { font-size: clamp(66px, 12.6vw, 196px); line-height: .85; letter-spacing: -0.075em; }
-.hero h1 .ln { display: block; white-space: nowrap; overflow: hidden; padding-bottom: .05em; margin-bottom: -.05em; will-change: transform; }
+.hero h1 { font-size: clamp(52px, 8.4vw, 136px); line-height: .85; letter-spacing: -0.075em; }
+.hero h1 .ln { display: block; white-space: nowrap; clip-path: inset(-0.1em -100vw 0 -0.2em); padding-bottom: .05em; margin-bottom: -.05em; will-change: transform; }
 .hero h1 .ln:nth-child(1) { transform: translateX(calc(var(--hp) * -6%)); }
 .hero h1 .ln:nth-child(2) { transform: translateX(calc(var(--hp) * 4%)); }
 .hero h1 .ch { display: inline-block; white-space: pre; }
@@ -84,13 +84,13 @@ code { font-family: var(--mono); font-size: .92em; }
 @keyframes drop { from { transform: translateY(-1.4em); opacity: 0; } }
 @keyframes blink { 50% { opacity: 0; } }
 .hero .meta { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 28px 40px; margin-top: clamp(32px, 4vw, 52px); }
-.hero .lead { max-width: 24ch; font-size: clamp(20px, 2vw, 26px); line-height: 1.35; letter-spacing: -0.025em; color: var(--muted); }
+.hero .lead { max-width: 24ch; font-size: clamp(18px, 1.7vw, 22px); line-height: 1.35; letter-spacing: -0.025em; color: var(--muted); }
 .hero .lead b { color: var(--ink); font-weight: 500; }
 .hero .ctas { display: flex; flex-wrap: wrap; gap: 12px; }
 .js .hero .lead, .js .hero .ctas { animation: fade 1.1s var(--ease) both; }
 .js .hero .lead { animation-delay: .75s; } .js .hero .ctas { animation-delay: .9s; }
 @keyframes fade { from { opacity: 0; transform: translateY(18px); } }
-.morph { position: relative; width: clamp(240px, 30vw, 430px); align-self: center; transform: translateY(calc(var(--hp) * -70px)); pointer-events: auto; }
+.morph { position: relative; width: clamp(170px, 21vw, 300px); align-self: center; transform: translateY(calc(var(--hp) * -70px)); pointer-events: auto; }
 .morph canvas { display: block; width: 100%; aspect-ratio: 1; cursor: pointer; touch-action: pan-y; }
 .morph figcaption { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 14px; font: 500 12px var(--mono); color: var(--muted); }
 .morph figcaption b { color: var(--ink); font-weight: 500; transition: opacity .3s; }
@@ -308,7 +308,7 @@ footer a:hover { color: var(--ink); }
   .links, .nav .btn { display: none; }
   .menu-btn { display: inline-grid; place-items: center; }
   .hero .wrap { grid-template-columns: minmax(0, 1fr); }
-  .morph { justify-self: center; width: min(78vw, 340px); margin-top: 8px; }
+  .morph { justify-self: center; width: min(60vw, 260px); margin-top: 8px; }
   .hero { min-height: 0; padding-block: 56px 110px; }
   .hero h1 { font-size: 18vw; }
   .specs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -596,7 +596,7 @@ footer a:hover { color: var(--ink); }
   assign(0);
   const mdraw = (t) => {
     mg.clearRect(0, 0, MS, MS);
-    const sz = cell * .8;
+    const sz = cell * .72;
     for (const p of parts) {
       const dx = p.x - mpos.x, dy = p.y - mpos.y, d2 = dx * dx + dy * dy, R = cell * 2.6;
       if (d2 < R * R) { const d = Math.sqrt(d2) || 1, f = (1 - d / R) * 2.4; p.vx += dx / d * f; p.vy += dy / d * f; }
@@ -633,7 +633,7 @@ footer a:hover { color: var(--ink); }
     W = r.width; H = r.height; canvas.width = W * dpr; canvas.height = H * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     grid = []; let s = 13; const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
     for (let y = 11; y < H; y += 22) for (let x = 11; x < W; x += 22) {
-      const w = Math.max(0, (x / W) * .8 + (1 - y / H) * .8 - .62);
+      const w = Math.max(0, (x / W) * .8 + (1 - y / H) * .8 - .74);
       grid.push({ x, y, lit: rnd() < w, big: rnd() < .3, ph: rnd() * 6.28, sp: .4 + rnd(), heat: 0, d: (W - x + y) / (W + H) });
     }
   };
@@ -650,8 +650,8 @@ footer a:hover { color: var(--ink); }
       }
       c.heat = dm < 120 ? Math.min(1, c.heat + .12) : Math.max(c.heat * .93, wv);
       if (c.lit || c.heat > .05) {
-        const tw = reduced ? 1 : .55 + .45 * Math.sin(t / 1000 * c.sp + c.ph), a = Math.max(c.lit ? tw : 0, c.heat), sz = (c.big ? 6 : 4) * (.8 + .2 * a);
-        ctx.globalAlpha = .3 + .7 * a; ctx.fillStyle = a > .72 ? col.px : col.soft;
+        const tw = reduced ? 1 : .55 + .45 * Math.sin(t / 1000 * c.sp + c.ph), a = Math.max(c.lit ? tw : 0, c.heat), sz = (c.big ? 5 : 3) * (.8 + .2 * a);
+        ctx.globalAlpha = .22 + .55 * a; ctx.fillStyle = a > .72 ? col.px : col.soft;
         ctx.fillRect(Math.round(c.x - sz / 2), Math.round(c.y - sz / 2), Math.round(sz), Math.round(sz));
       } else { ctx.globalAlpha = 1; ctx.fillStyle = col.dot; ctx.fillRect(c.x - 1, c.y - 1, 2, 2); }
     }
