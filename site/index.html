@@ -135,6 +135,7 @@ code { font-family: var(--mono); font-size: .92em; }
 .pfield { position: absolute; z-index: -1; width: min(60vw, 720px); height: min(80%, 560px); pointer-events: none; }
 .pfield.tr { top: 0; right: 0; }
 .pfield.bl { bottom: 0; left: 0; height: min(42%, 340px); }
+.story-pin .pfield.bl { height: min(22%, 170px); }
 .ghost-arrow { position: absolute; right: max(20px, 4vw); top: clamp(40px, 6vw, 80px); width: clamp(60px, 7vw, 96px); opacity: .9; }
 .ghost-arrow rect { fill: var(--pixel); }
 
@@ -188,9 +189,6 @@ input[type=range]::-moz-range-thumb { width: 18px; height: 18px; background: var
 .chap span { font-size: 15px; color: var(--muted); max-height: 0; overflow: hidden; transition: max-height .5s var(--ease); }
 .chap.on { opacity: 1; }
 .chap.on span { max-height: 3em; }
-.progress { height: 2px; background: var(--line); margin-top: 18px; }
-.progress i { position: relative; display: block; height: 100%; width: calc(var(--sp, 0) * 100%); background: linear-gradient(90deg, var(--ink), var(--pixel)); }
-.progress i::after { content: ""; position: absolute; right: -3px; top: -2px; width: 6px; height: 6px; background: var(--pixel); }
 .chap.on b::after { content: ""; display: inline-block; width: 7px; height: 7px; margin-left: 10px; vertical-align: 3px; background: var(--pixel); animation: breathe 2.4s ease-in-out infinite; }
 @keyframes breathe { 50% { opacity: .25; } }
 .window { --rx: 0deg; --ry: 0deg; grid-column: 6 / span 7; background: var(--surface); aspect-ratio: 16 / 11; display: flex; flex-direction: column; overflow: hidden; position: relative;
@@ -422,7 +420,6 @@ footer a:hover { color: var(--ink); }
           <div class="chap" data-i="1" data-n="02"><b>Chooses</b><span>The strongest model that runs smoothly.</span></div>
           <div class="chap" data-i="2" data-n="03"><b>Compresses</b><span>A third of the size, quality checked.</span></div>
           <div class="chap" data-i="3" data-n="04"><b>Answers</b><span>Privately, on your own machine.</span></div>
-          <div class="progress" aria-hidden="true"><i></i></div>
         </div>
         <div class="window" aria-hidden="true">
           <div class="win-bar"><i></i><i></i><i></i><span>tlav setup</span><em id="winStatus">measuring…</em></div>
@@ -767,13 +764,15 @@ footer a:hover { color: var(--ink); }
   const fxDraw = (t) => {
     fg.clearRect(0, 0, FW, FH);
     if (wipeT >= 0) {
-      const C = 18, cols = Math.ceil(FW / C), rows = Math.ceil(FH / C), dur = 620, el = t - wipeT;
-      if (el > dur + 260) wipeT = -1;
+      // light diagonal shimmer: small, sparse pixels that pass once and fade
+      const C = 12, cols = Math.ceil(FW / C), rows = Math.ceil(FH / C), dur = 520, life = 200, el = t - wipeT;
+      if (el > dur + life) wipeT = -1;
       else for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) {
-        const d = (x + y) / (cols + rows) * dur, k = (el - d) / 260;
+        if ((x * 5 + y * 3) % 3) continue;                       // only every third cell
+        const d = (x + y) / (cols + rows) * dur, k = (el - d) / life;
         if (k <= 0 || k >= 1) continue;
-        fg.globalAlpha = Math.sin(k * Math.PI) * .95; fg.fillStyle = (x * 7 + y * 3) % 5 ? col.px : col.soft;
-        const s = (C - 3) * Math.sin(k * Math.PI);
+        const s = 5 * Math.sin(k * Math.PI);
+        fg.globalAlpha = Math.sin(k * Math.PI) * .45; fg.fillStyle = (x + y) % 4 ? col.px : col.soft;
         fg.fillRect(x * C + (C - s) / 2, y * C + (C - s) / 2, s, s);
       }
     }
