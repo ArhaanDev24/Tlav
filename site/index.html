@@ -18,8 +18,8 @@
   --muted: #4f5948;
   --line: #cfd8c5;
   --dot: #bfc9b2;
-  --deep: #24402c;        /* forest, a darker step of the hero ground */
-  --night: #14261a;       /* hero ground */
+  --deep: #2f5a3d;        /* forest: model share, highlights */
+  --night: #24452f;       /* forest ground: hero, chat, closing band */
   --on-deep: #f3f6ee;
   --pixel: #ff6d3a;       /* signal orange */
   --pixel-soft: #f5c9b6;
@@ -287,19 +287,29 @@ input[type=range]::-moz-range-thumb { width: 18px; height: 18px; background: var
 .js .num.pre .mem.half i { background: var(--sys); box-shadow: none; }
 
 /* ---------- install ---------- */
-.final { text-align: left; }
-.final h2 { font-size: clamp(44px, 6vw, 88px); line-height: .9; letter-spacing: -0.065em; max-width: 12ch; }
+.final { --ink: #eef3e8; --muted: #b8c8b2; --line: #3b5f46; background: var(--night); color: var(--ink); }
+.final-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 24px; align-items: start; }
+.final-intro { grid-column: 1 / span 5; }
+.final h2 { font-size: clamp(44px, 6vw, 88px); line-height: .92; letter-spacing: -0.045em; max-width: 11ch; }
 .final h2 .dot { display: inline-block; width: .15em; height: .15em; background: var(--pixel); margin-left: .02em; }
-.cmd { display: flex; align-items: center; gap: 12px; max-width: 640px; margin-top: 48px; padding: 16px 16px 16px 20px; background: var(--ink); color: var(--bg); }
+.final .lead { margin-top: 22px; max-width: 32ch; font-size: 19px; line-height: 1.45; color: var(--muted); }
+.final .ctas { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 30px; align-items: center; }
+.final .ctas span { font-size: 14px; color: var(--muted); }
+.final .btn { background: var(--pixel); color: #1a2016; font-weight: 600; }
+.final .btn::before { background: #ffa47f; }
+.isteps { grid-column: 7 / span 6; list-style: none; margin: 0; padding: 0; display: grid; }
+.isteps li { display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 4px 16px; padding: 22px 0; border-top: 1px solid var(--line); }
+.isteps li:last-child { border-bottom: 1px solid var(--line); }
+.isteps .n { grid-row: span 3; display: grid; place-items: center; width: 34px; height: 34px; background: var(--pixel); color: #1a2016; font: 700 16px var(--display); }
+.isteps b { font: 600 22px/1.2 var(--display); letter-spacing: -0.02em; }
+.isteps p { font-size: 15px; color: var(--muted); }
+.isteps p code { color: var(--ink); }
+.cmd { display: flex; align-items: center; gap: 12px; min-width: 0; margin-top: 10px; padding: 12px 12px 12px 16px; background: #183022; color: #eef3e8; }
 .cmd code { flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; font-size: 14px; scrollbar-width: none; }
 .cmd code::before { content: "$ "; color: var(--pixel); }
-.cmd.second { margin-top: 10px; }
-.win-note { margin-top: 12px; font-size: 14px; color: var(--muted); }
-.copy { flex: none; padding: 7px 12px; border: 1px solid color-mix(in srgb, var(--bg) 30%, transparent); background: transparent; color: var(--bg); font: 500 13px var(--sans); cursor: pointer; transition: background-color .2s; }
-.copy:hover { background: color-mix(in srgb, var(--bg) 12%, transparent); }
-.final .ctas { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 16px; align-items: center; }
-.final .ctas span { font-size: 14px; color: var(--muted); }
-footer { padding-block: 28px calc(28px + env(safe-area-inset-bottom, 0px)); border-top: 1px solid var(--line); font-size: 14px; color: var(--muted); }
+.copy { flex: none; padding: 7px 12px; border: 1px solid rgba(238, 243, 232, .3); background: transparent; color: #eef3e8; font: 500 13px var(--sans); cursor: pointer; transition: background-color .2s; }
+.copy:hover { background: rgba(238, 243, 232, .12); }
+footer { padding-block: 28px calc(28px + env(safe-area-inset-bottom, 0px)); background: var(--night); border-top: 1px solid #3b5f46; font-size: 14px; color: #b8c8b2; }
 footer .wrap { display: flex; flex-wrap: wrap; gap: 12px 28px; justify-content: space-between; }
 footer a { text-decoration: none; }
 footer a:hover { color: var(--ink); }
@@ -313,6 +323,8 @@ footer a:hover { color: var(--ink); }
   .picker, .answer { grid-column: 1 / -1; }
   .steps, .nums { grid-template-columns: minmax(0, 1fr); }
   .prompts, .chatwrap { grid-column: 1 / -1; }
+  .final-intro, .isteps { grid-column: 1 / -1; }
+  .isteps { margin-top: 24px; }
   .cstats { grid-template-columns: repeat(3, auto) minmax(0, 1fr); }
   .replay { grid-column: 1 / -1; justify-self: start; }
   .wsteps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -541,13 +553,20 @@ footer a:hover { color: var(--ink); }
     </div>
   </section>
 
-  <section class="sec final" id="install" aria-labelledby="install-title" style="position:relative">
-    <div class="wrap reveal">
-      <h2 id="install-title">Don't throw it out. Wake it up<span class="dot"></span></h2>
-      <div class="cmd"><code>git clone https://github.com/ArhaanDev24/Tlavv &amp;&amp; cd Tlavv &amp;&amp; ./install.sh</code><button class="copy" type="button">Copy</button></div>
-      <div class="cmd second"><code>tlav setup</code><button class="copy" type="button">Copy</button></div>
-      <p class="win-note">On Windows, run <code>install.ps1</code> in PowerShell instead of <code>install.sh</code>.</p>
-      <div class="ctas"><a class="btn ghost" href="https://github.com/ArhaanDev24/Tlavv" target="_blank" rel="noopener">View on GitHub</a><span>Free and open source</span></div>
+  <section class="sec final" id="install" aria-labelledby="install-title">
+    <div class="wrap final-grid reveal">
+      <div class="final-intro">
+        <h2 id="install-title">Don't throw it out. Wake it up<span class="dot"></span></h2>
+        <p class="lead">Install once. Tlav picks, shrinks and runs the right model for the computer in front of you.</p>
+        <div class="ctas"><a class="btn" href="https://github.com/ArhaanDev24/Tlavv" target="_blank" rel="noopener">View on GitHub <svg class="px" viewBox="0 0 7 7" aria-hidden="true"><path fill="currentColor" d="M2 0h5v5H6V2H5v1H4v1H3v1H2v1H1v1H0V6h1V5h1V4h1V3h1V2h1V1H2z"/></svg></a><span>Free and open source</span></div>
+      </div>
+      <ol class="isteps">
+        <li><span class="n" aria-hidden="true">1</span><b>Install</b><p>macOS and Linux. On Windows, run <code>install.ps1</code> in PowerShell.</p>
+          <div class="cmd"><code>git clone https://github.com/ArhaanDev24/Tlavv &amp;&amp; cd Tlavv &amp;&amp; ./install.sh</code><button class="copy" type="button">Copy</button></div></li>
+        <li><span class="n" aria-hidden="true">2</span><b>Set up</b><p>Measures your machine, picks a model and compresses it.</p>
+          <div class="cmd"><code>tlav setup</code><button class="copy" type="button">Copy</button></div></li>
+        <li><span class="n" aria-hidden="true">3</span><b>Chat</b><p>Your private AI opens at <code>localhost:8080</code>. Nothing leaves your computer.</p></li>
+      </ol>
     </div>
   </section>
 </main>
@@ -643,7 +662,7 @@ footer a:hover { color: var(--ink); }
   // halftone wave: a regular grid of square dots whose size swells in a slow wave (green → orange)
   const GAP = 18;
   const mixHex = (a, b, k) => { const pa = parseInt(a.slice(1), 16), pb = parseInt(b.slice(1), 16); const ch = (s) => Math.round(((pa >> s) & 255) * (1 - k) + ((pb >> s) & 255) * k); return `rgb(${ch(16)},${ch(8)},${ch(0)})`; };
-  const PAL = Array.from({ length: 17 }, (_, i) => mixHex("#3f6e4c", "#ff6d3a", Math.pow(i / 16, 1.6)));
+  const PAL = Array.from({ length: 17 }, (_, i) => mixHex("#5a8a66", "#ff6d3a", Math.pow(i / 16, 1.6)));
   const build = () => {
     const r = canvas.getBoundingClientRect(), dpr = Math.min(2, devicePixelRatio || 1);
     W = r.width; H = r.height; canvas.width = W * dpr; canvas.height = H * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
