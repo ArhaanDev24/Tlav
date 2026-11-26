@@ -30,10 +30,26 @@
   --ease: cubic-bezier(.2, .7, .1, 1);
   color-scheme: light;
 }
+/* Sage Deep: a shade darker, calmer contrast */
+:root[data-palette="deep"] {
+  --bg: #d0d7c8; --surface: #dce2d5; --ink: #10150d; --muted: #4a5343; --line: #b4bea8; --dot: #a4af95;
+  --deep: #1c2d20; --on-deep: #dfe5d8; --pixel: #e65a2b; --pixel-soft: #efb49a; --sys: #97a288;
+}
+/* Sage Bright: airy, fresher green */
+:root[data-palette="bright"] {
+  --bg: #eef2e8; --surface: #f8faf5; --ink: #1a2016; --muted: #646d5b; --line: #d6dccd; --dot: #c6cfba;
+  --deep: #2f5a3a; --on-deep: #f3f6ee; --pixel: #ff6d3a; --pixel-soft: #ffd2bf; --sys: #b3bca6;
+}
+/* Forest & Gold: dark forest with gold */
+:root[data-palette="gold"] {
+  --bg: #19211b; --surface: #202a23; --ink: #eee9da; --muted: #a5aa9a; --line: #313c34; --dot: #39463c;
+  --deep: #c9a54c; --on-deep: #19211b; --pixel: #e2bb57; --pixel-soft: #5c4c25; --sys: #48544a;
+  color-scheme: dark;
+}
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 html { scroll-behavior: smooth; background: var(--bg); }
-body { background: var(--bg); color: var(--ink); font: 400 17px/1.6 var(--sans); -webkit-font-smoothing: antialiased; overflow-x: clip; }
+body { background: var(--bg); color: var(--ink); font: 400 17px/1.6 var(--sans); transition: background-color .5s, color .5s; -webkit-font-smoothing: antialiased; overflow-x: clip; }
 body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 60; background: var(--bg); }
 a { color: inherit; }
 h1, h2, h3 { font-weight: 600; letter-spacing: -0.05em; line-height: .95; margin: 0; text-wrap: balance; }
@@ -115,6 +131,23 @@ code { font-family: var(--mono); font-size: .92em; }
 .split-head p { grid-column: 9 / span 4; color: var(--muted); font-size: 18px; max-width: 34ch; }
 .reveal { transition: transform 1s var(--ease), opacity 1s var(--ease); }
 .js .reveal.pre { transform: translateY(28px); opacity: 0; }
+
+/* ---------- section label + textures ---------- */
+.kicker { display: inline-flex; align-items: center; gap: 10px; margin-bottom: 22px; font: 500 13px var(--mono); color: var(--muted); }
+.kicker::before { content: ""; width: 8px; height: 8px; background: var(--pixel); }
+.split-head .kicker { grid-column: 1 / -1; margin-bottom: -6px; }
+.textured { position: relative; isolation: isolate; }
+.textured::before { content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  background-image: radial-gradient(var(--dot) 1.2px, transparent 1.6px); background-size: 22px 22px;
+  -webkit-mask-image: radial-gradient(70% 90% at 100% 0%, #000, transparent 70%); mask-image: radial-gradient(70% 90% at 100% 0%, #000, transparent 70%); }
+.textured.left::before { -webkit-mask-image: radial-gradient(70% 90% at 0% 100%, #000, transparent 70%); mask-image: radial-gradient(70% 90% at 0% 100%, #000, transparent 70%); }
+.dark { background: var(--deep); color: var(--on-deep); --line: color-mix(in srgb, var(--on-deep) 18%, transparent); --muted: color-mix(in srgb, var(--on-deep) 66%, var(--deep)); --dot: color-mix(in srgb, var(--on-deep) 16%, var(--deep)); }
+.dark .kicker { color: var(--muted); }
+.dark { --hi: var(--pixel); }
+:root[data-palette="gold"] .dark { --hi: var(--on-deep); }
+.dark .kicker::before { background: var(--hi); }
+.ghost-arrow { position: absolute; right: max(20px, 4vw); top: clamp(40px, 6vw, 80px); width: clamp(60px, 7vw, 96px); opacity: .9; }
+.ghost-arrow rect { fill: var(--pixel); }
 
 /* ---------- fit tool ---------- */
 .tool { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 24px; align-items: start; }
@@ -224,9 +257,10 @@ input[type=range]::-moz-range-thumb { width: 18px; height: 18px; background: var
 /* ---------- cluster ---------- */
 .layers { display: grid; grid-template-columns: repeat(48, minmax(0, 1fr)); gap: 4px; position: relative; }
 .layers i { height: clamp(36px, 5vw, 64px); background: var(--deep); transform-origin: bottom; transition: transform .7s var(--ease); transition-delay: calc(var(--i) * 14ms); }
-.layers i.b { background: color-mix(in srgb, var(--deep) 42%, var(--surface)); }
+.layers i { background: var(--on-deep); }
+.layers i.b { background: color-mix(in srgb, var(--on-deep) 38%, var(--deep)); }
 .js .layers.pre i { transform: scaleY(0); }
-.layers .tok { position: absolute; top: -14px; left: 0; width: 8px; height: 8px; background: var(--pixel); animation: run 3.6s cubic-bezier(.45, 0, .55, 1) infinite; }
+.layers .tok { position: absolute; top: -14px; left: 0; width: 8px; height: 8px; background: var(--on-deep); animation: run 3.6s cubic-bezier(.45, 0, .55, 1) infinite; }
 @keyframes run { from { left: 0; } to { left: calc(100% - 8px); } }
 .who { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-top: 16px; }
 .who div { display: grid; gap: 2px; }
@@ -235,10 +269,22 @@ input[type=range]::-moz-range-thumb { width: 18px; height: 18px; background: var
 
 /* ---------- numbers ---------- */
 .nums { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: clamp(24px, 4vw, 56px); }
-.num { display: grid; gap: 12px; padding-top: 24px; border-top: 1px solid var(--ink); }
+.num { display: grid; gap: 14px; align-content: start; padding-top: 24px; border-top: 1px solid var(--line); }
 .num b { font: 600 clamp(56px, 7vw, 104px)/.9 var(--sans); letter-spacing: -0.06em; font-variant-numeric: tabular-nums; }
-.num b small { font-size: .36em; letter-spacing: -0.02em; margin-left: 4px; color: var(--muted); font-weight: 500; }
+.num b small { font-size: .36em; letter-spacing: -0.02em; margin-left: 4px; color: var(--hi, var(--pixel)); font-weight: 500; }
 .num p { color: var(--muted); max-width: 30ch; }
+.chart { display: grid; gap: 10px; margin-top: 6px; }
+.bar { display: grid; grid-template-columns: 7.5em 1fr; gap: 12px; align-items: center; font: 12px var(--mono); color: var(--muted); }
+.bar .track { height: 10px; background: color-mix(in srgb, var(--on-deep) 10%, transparent); position: relative; }
+.bar .track i { position: absolute; inset: 0 auto 0 0; width: var(--w); background: color-mix(in srgb, var(--on-deep) 55%, transparent); transform-origin: left; transition: transform 1.2s var(--ease) .2s; }
+.bar.hi .track i { background: var(--hi, var(--pixel)); }
+.bar .track span { position: absolute; right: 0; top: -18px; color: var(--on-deep); }
+.js .num.pre .bar .track i { transform: scaleX(0); }
+.mem { display: grid; grid-template-columns: repeat(20, minmax(0, 1fr)); gap: 3px; }
+.mem i { aspect-ratio: 1; background: color-mix(in srgb, var(--on-deep) 50%, transparent); transition: background-color .4s, opacity .4s; transition-delay: calc(var(--i) * 30ms + .3s); }
+.mem.half i:nth-child(n+11) { background: transparent; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--on-deep) 18%, transparent); }
+.mem.half i:nth-child(-n+10) { background: var(--hi, var(--pixel)); }
+.js .num.pre .mem.half i { background: color-mix(in srgb, var(--on-deep) 50%, transparent); box-shadow: none; }
 
 /* ---------- install ---------- */
 .final { text-align: left; }
@@ -256,11 +302,19 @@ footer .wrap { display: flex; flex-wrap: wrap; gap: 12px 28px; justify-content: 
 footer a { text-decoration: none; }
 footer a:hover { color: var(--ink); }
 
+/* ---------- palette switcher ---------- */
+.palette { position: fixed; z-index: 45; right: max(16px, env(safe-area-inset-right, 0px)); bottom: calc(16px + env(safe-area-inset-bottom, 0px)); display: flex; align-items: center; gap: 4px; padding: 6px 6px 6px 12px; background: var(--surface); box-shadow: 0 0 0 1px var(--line), 0 12px 30px rgba(0, 0, 0, .12); font: 500 12px var(--mono); color: var(--muted); }
+.palette span { margin-right: 4px; }
+.palette button { width: 30px; height: 30px; padding: 4px; border: 1px solid transparent; background: transparent; cursor: pointer; }
+.palette button[aria-pressed="true"] { border-color: var(--ink); }
+.palette i { display: block; width: 100%; height: 100%; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .12); }
+
 /* ---------- responsive ---------- */
 @media (max-width: 960px) {
   .split-head h2, .split-head p { grid-column: 1 / -1; }
   .picker, .answer { grid-column: 1 / -1; }
   .steps, .nums { grid-template-columns: minmax(0, 1fr); }
+  .ghost-arrow { width: 54px; }
   .chapters, .window, .prompts, .chatwrap { grid-column: 1 / -1; }
   .story-pin { align-items: start; padding-top: 16px; }
   .story-grid { gap: 16px; }
@@ -336,9 +390,10 @@ footer a:hover { color: var(--ink); }
     <div class="row">your old pc can think<i></i>your old pc can think<i></i>your old pc can think</div>
   </section>
 
-  <section class="sec" id="fit" aria-labelledby="fit-title">
+  <section class="sec textured" id="fit" aria-labelledby="fit-title">
     <div class="wrap">
       <div class="split-head reveal">
+        <span class="kicker">02 · Your machine</span>
         <h2 id="fit-title">What can your computer run?</h2>
         <p>Set your memory. Tlav picks the strongest model that still runs smoothly.</p>
       </div>
@@ -369,6 +424,7 @@ footer a:hover { color: var(--ink); }
     <div class="story-pin">
       <div class="wrap story-grid">
         <div class="chapters">
+          <span class="kicker">01 · How it works</span>
           <h2 id="how-title">Watch it work.</h2>
           <div class="chap" data-i="0" data-n="01"><b>Measures</b><span>Memory, processor and real speed.</span></div>
           <div class="chap" data-i="1" data-n="02"><b>Chooses</b><span>The strongest model that runs smoothly.</span></div>
@@ -412,9 +468,10 @@ footer a:hover { color: var(--ink); }
     </div>
   </section>
 
-  <section class="sec tint" id="try" aria-labelledby="try-title">
+  <section class="sec tint textured left" id="try" aria-labelledby="try-title">
     <div class="wrap">
       <div class="split-head reveal">
+        <span class="kicker">03 · Try it</span>
         <h2 id="try-title">Feel the speed.</h2>
         <p>Pick a question. The reply streams at the speed a real old computer produces it.</p>
       </div>
@@ -439,9 +496,10 @@ footer a:hover { color: var(--ink); }
     </div>
   </section>
 
-  <section class="sec" id="cluster" aria-labelledby="cluster-title">
+  <section class="sec dark textured left" id="cluster" aria-labelledby="cluster-title">
     <div class="wrap">
       <div class="split-head reveal">
+        <span class="kicker">04 · Cluster</span>
         <h2 id="cluster-title">Two computers. One bigger mind.</h2>
         <p>Link a spare machine and Tlav splits the model across both, so their memory adds up.</p>
       </div>
@@ -452,17 +510,44 @@ footer a:hover { color: var(--ink); }
     </div>
   </section>
 
-  <section class="sec tint" aria-label="Results">
+  <section class="sec dark textured" id="results" aria-labelledby="results-title">
     <div class="wrap">
+      <div class="split-head reveal">
+        <span class="kicker">05 · Measured</span>
+        <h2 id="results-title">Less memory. Same answers.</h2>
+        <p>Results from Tlav's own test runs.</p>
+      </div>
       <div class="nums">
-        <div class="num reveal"><b data-to="1.6" data-dec="1">1.6<small>×</small></b><p>faster answers, with output identical to the original model.</p></div>
-        <div class="num reveal" style="transition-delay:.08s"><b data-to="50" data-dec="0">50<small>%</small></b><p>less memory for conversations, at a measured quality change under 0.5%.</p></div>
-        <div class="num reveal" style="transition-delay:.16s"><b data-to="1.2" data-dec="1">1.2<small>%</small></b><p>quality change after shrinking a model to a third of its size.</p></div>
+        <div class="num reveal">
+          <b data-to="1.6" data-dec="1">1.6<small>×</small></b>
+          <p>faster answers, with output identical to the original model.</p>
+          <div class="chart" aria-label="9.6 tokens per second before, 15.7 with Tlav">
+            <div class="bar"><span>before</span><div class="track" style="--w:61%"><i></i><span>9.6 t/s</span></div></div>
+            <div class="bar hi"><span>with Tlav</span><div class="track" style="--w:100%"><i></i><span>15.7 t/s</span></div></div>
+          </div>
+        </div>
+        <div class="num reveal" style="transition-delay:.08s">
+          <b data-to="50" data-dec="0">50<small>%</small></b>
+          <p>less memory for conversations, at a measured quality change under 0.5%.</p>
+          <div class="chart" aria-label="Conversation memory before and after: half the size">
+            <div class="bar"><span>before</span><div class="mem" id="memA"></div></div>
+            <div class="bar hi"><span>with Tlav</span><div class="mem half" id="memB"></div></div>
+          </div>
+        </div>
+        <div class="num reveal" style="transition-delay:.16s">
+          <b data-to="1.2" data-dec="1">1.2<small>%</small></b>
+          <p>quality change after shrinking a model to 40% of its size.</p>
+          <div class="chart" aria-label="Model size 942 MB before, 374 MB after">
+            <div class="bar"><span>942 MB</span><div class="track" style="--w:100%"><i></i></div></div>
+            <div class="bar hi"><span>374 MB</span><div class="track" style="--w:40%"><i></i></div></div>
+          </div>
+        </div>
       </div>
     </div>
   </section>
 
-  <section class="sec final" id="install" aria-labelledby="install-title">
+  <section class="sec final textured" id="install" aria-labelledby="install-title" style="position:relative">
+    <svg class="ghost-arrow px" id="arrow2" viewBox="0 0 11 11" aria-hidden="true"></svg>
     <div class="wrap reveal">
       <h2 id="install-title">Don't throw it out. Wake it up<span class="dot"></span></h2>
       <div class="cmd"><code>git clone https://github.com/ArhaanDev24/Tlavv &amp;&amp; cd Tlavv &amp;&amp; ./install.sh &amp;&amp; tlav setup</code><button class="copy" type="button">Copy</button></div>
@@ -470,6 +555,14 @@ footer a:hover { color: var(--ink); }
     </div>
   </section>
 </main>
+
+<div class="palette" role="group" aria-label="Colour combination" id="palette">
+  <span>Colour</span>
+  <button type="button" data-p="sage" aria-pressed="true" title="Sage"><i style="background:linear-gradient(135deg,#e3e7dd 50%,#29402e 50% 80%,#f2683c 80%)"></i></button>
+  <button type="button" data-p="deep" aria-pressed="false" title="Sage Deep"><i style="background:linear-gradient(135deg,#d0d7c8 50%,#1c2d20 50% 80%,#e65a2b 80%)"></i></button>
+  <button type="button" data-p="bright" aria-pressed="false" title="Sage Bright"><i style="background:linear-gradient(135deg,#f8faf5 50%,#2f5a3a 50% 80%,#ff6d3a 80%)"></i></button>
+  <button type="button" data-p="gold" aria-pressed="false" title="Forest &amp; Gold"><i style="background:linear-gradient(135deg,#19211b 50%,#c9a54c 50%)"></i></button>
+</div>
 
 <footer>
   <div class="wrap"><span>© Tlav · MIT License</span><a href="https://github.com/ArhaanDev24/Tlavv" target="_blank" rel="noopener">GitHub</a></div>
@@ -683,6 +776,24 @@ footer a:hover { color: var(--ink); }
     const tio = new IntersectionObserver((e) => { if (e[0].isIntersecting) { tio.disconnect(); ask(0); } }, { threshold: .5 });
     tio.observe(chatlog);
   }
+
+  /* second pixel arrow + memory cells */
+  cellsA.forEach(([x, y]) => { const r = document.createElementNS(NS, "rect"); r.setAttribute("x", x); r.setAttribute("y", y); r.setAttribute("width", 1.02); r.setAttribute("height", 1.02); $("arrow2").appendChild(r); });
+  ["memA", "memB"].forEach((id) => { for (let i = 0; i < 20; i++) { const c = document.createElement("i"); c.style.setProperty("--i", i); $(id).appendChild(c); } });
+
+  /* colour combinations */
+  const palBtns = document.querySelectorAll("#palette button");
+  const setPal = (pal) => {
+    if (pal === "sage") delete root.dataset.palette; else root.dataset.palette = pal;
+    palBtns.forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.p === pal)));
+    col.dot = css("--dot"); col.px = css("--pixel"); col.soft = css("--pixel-soft"); draw(performance.now());
+    try { localStorage.setItem("tlav-palette", pal); } catch (_) {}
+  };
+  palBtns.forEach((b) => b.addEventListener("click", () => setPal(b.dataset.p)));
+  let pal0 = (location.hash.match(/^#palette-(sage|deep|bright|gold)$/) || [])[1];
+  if (!pal0) { try { pal0 = localStorage.getItem("tlav-palette"); } catch (_) {} }
+  if (["deep", "bright", "gold"].includes(pal0)) setPal(pal0);
+  addEventListener("hashchange", () => { const m = location.hash.match(/^#palette-(sage|deep|bright|gold)$/); if (m) setPal(m[1]); });
 
   /* cluster layers */
   const layers = $("layers");

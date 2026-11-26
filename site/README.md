@@ -14,5 +14,10 @@ A minimal page in one sage palette:
 - **Feel the speed:** pick a question and watch an example reply stream at the measured speed of a 16 GB desktop or a 4 GB laptop.
 - Cluster layer split, three measured results and a one-line install.
 
+## Colour combinations
+Switch with the small picker at the bottom right, or by link:
+`#palette-sage` (default), `#palette-deep` (darker), `#palette-bright` (brighter), `#palette-gold` (forest and gold).
+Once one is chosen, make it the `:root` default and delete the picker.
+
 ## Keeping the tool in sync
 The catalog in the page is generated from `tlav/data/catalog.json`. After changing the catalog, regenerate the `MODELS` and `QUANTS` arrays in the script.
