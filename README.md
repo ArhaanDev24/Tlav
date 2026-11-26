@@ -24,10 +24,6 @@ Requires Python 3.8+ (no other Python packages). On first setup Tlav installs [l
 
 **macOS / Linux**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/OWNER/Tlav/main/install.sh | bash
-```
-or, from a clone:
-```bash
 git clone https://github.com/ArhaanDev24/Tlavv && cd Tlavv && ./install.sh
 ```
 
