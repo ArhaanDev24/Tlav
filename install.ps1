@@ -17,4 +17,4 @@ $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
 if ($userPath -notlike "*$scripts*") {
   [Environment]::SetEnvironmentVariable("Path", "$userPath;$scripts", "User")
 }
-Write-Host "`nTlav installed. Open a new terminal, then run:`n  tlav doctor`n  tlav setup"
+Write-Host "`nTlav installed. Open a new terminal, then just type:`n  tlav"

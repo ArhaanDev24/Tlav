@@ -87,7 +87,8 @@ Typical picks for a 2013 iMac (quad-core Haswell, DDR3-1600):
 |---|---|
 | `/new` | fresh conversation (the previous one is kept as `last`) |
 | `/system TEXT` | how the assistant should behave |
-| `/think on\|off` | let reasoning models think first: smarter, slower (on by default only on fast PCs) |
+| `/think on\|off` | let reasoning models think first: smarter, slower (on by default only on fast PCs with a 3B+ model) |
+| `/thoughts` | show the reasoning text as it's written (normally only the status line shows progress) |
 | `/temp X` | 0 = precise, 1 = creative |
 | `/save NAME`, `/load NAME`, `/list` | keep and reopen conversations |
 | `/copy` | copy the last answer |
@@ -97,6 +98,12 @@ Typical picks for a 2013 iMac (quad-core Haswell, DDR3-1600):
 | `"""` | start/end a message with several lines |
 
 Old turns are left out automatically when a long chat no longer fits the model's memory. `tlav chat --model file.gguf` chats with any file; `tlav chat --url http://host:8080` with a Tlav on another PC.
+
+### The web chat
+
+Choose **web** and Tlav opens its own chat page, served by your own computer: it works with no internet, and on phones too (`tlav run --host 0.0.0.0`, then open the address it prints). It shows the same status lines and Tlav square as the terminal, with the speed after each answer. Reasoning sits in a collapsed "Thought for 12s" section, and there's a Stop button. Conversations stay in that browser.
+
+If the usual port (8080) is taken by another program, Tlav starts on the next free one and tells you, so it never ends up talking to someone else's model.
 
 ## Combine computers (cluster mode)
 
