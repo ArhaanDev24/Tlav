@@ -52,47 +52,139 @@ HELP = """\
 CHARS_PER_TOKEN = 3.5
 
 
+# What Tlav says while the model gets going: a nod to the old machines it runs on.
+VERBS = [
+    "Booting up", "Warming the vacuum tubes", "Spinning up the hard drive", "Defragmenting thoughts",
+    "Dialing up", "Rewinding the tape", "Loading from floppy", "Paging in memory",
+    "Blowing on the cartridge", "Shuffling punch cards", "Consulting the BIOS", "Waking the old CPU",
+    "Reticulating bits", "Tlaving",
+]
+
+
 class Mark:
-    """The Tlav square as a writing cursor: its orange corner circles while the model writes.
+    """The Tlav square, animated while the model answers.
 
     The logo is a dark square with an orange top-right quarter; here that quarter moves
-    corner to corner (top-right, bottom-right, bottom-left, top-left) after the last
-    character, like a pen. Only on real terminals; plain output stays plain.
+    corner to corner (top-right, bottom-right, bottom-left, top-left).
+
+    1. Waiting: a header line at the top left shows the moving square, an old-computer
+       phrase that changes every few seconds, and the seconds elapsed.
+    2. Writing: the header settles into "■ Tlav" and the square follows the last
+       character like a pen until the answer is done.
+
+    Only on real terminals; plain output stays plain.
     """
     FRAMES = "▝▗▖▘"
 
-    def __init__(self, enabled: bool = _COLOR, interval: float = 0.14):
+    def __init__(self, enabled: bool = _COLOR, interval: float = 0.14, verb_every: float = 2.8,
+                 verbs: Optional[List[str]] = None):
+        import random
         import threading
         self.on = enabled
         self.interval = interval
+        self.verb_every = verb_every
+        self.verbs = list(verbs or VERBS)
+        random.shuffle(self.verbs)
         self.lock = threading.Lock()
         self.i = 0
+        self.writing = False
+        self.t0 = time.time()
+        self.col = 0          # cursor column, so Tlav wraps lines itself (keeps the indent,
+        self.word = ""        # never splits a word, leaves a column for the moving square)
+        self.style = None
+        self.width = max(20, shutil.get_terminal_size((80, 24)).columns)
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._run, daemon=True) if enabled else None
 
     def _frame(self) -> str:
         return accent(self.FRAMES[self.i % 4])
 
+    def verb(self) -> str:
+        return self.verbs[int((time.time() - self.t0) / self.verb_every) % len(self.verbs)]
+
+    def _header(self) -> str:
+        secs = int(time.time() - self.t0)
+        return f"\r\033[K  {self._frame()} {self.verb()}…" + dim(f"  {secs}s" if secs else "")
+
     def _run(self):
         while not self._stop.wait(self.interval):
             with self.lock:
                 self.i += 1
-                sys.stdout.write("\b" + self._frame())
+                sys.stdout.write("\b" + self._frame() if self.writing else self._header())
                 sys.stdout.flush()
 
-    def start(self, prefix: str = "") -> None:
-        sys.stdout.write(prefix + (self._frame() if self.on else ""))
+    def start(self, prefix: str = "  ") -> None:
+        self.t0 = time.time()
+        if not self.on:
+            sys.stdout.write(prefix)
+            sys.stdout.flush()
+            return
+        sys.stdout.write(self._header())
         sys.stdout.flush()
         if self._thread:
             self._thread.start()
 
-    def write(self, text: str) -> None:
+    def _word_out(self) -> str:
+        """Print the pending word, moving to a new indented line first if it doesn't fit."""
+        w, self.word = self.word, ""
+        if not w:
+            return ""
+        limit = self.limit
+        out = []
+        if self.col + len(w) > limit and self.col > 2:
+            out.append("\n  ")
+            self.col = 2
+        while len(w) > limit - self.col:   # a word longer than a whole line
+            cut = limit - self.col
+            out.append(self._paint(w[:cut]) + "\n  ")
+            w, self.col = w[cut:], 2
+        out.append(self._paint(w))
+        self.col += len(w)
+        return "".join(out)
+
+    @property
+    def limit(self) -> int:
+        # Text stops two columns before the edge: the square takes the next one, and it must
+        # never sit in the very last column, where a backspace lands one column short.
+        return self.width - 2
+
+    def _paint(self, s: str) -> str:
+        return self.style(s) if self.style else s
+
+    def _flow(self, text: str) -> str:
+        """Word-wrap streamed text to the terminal width, keeping the 2-space indent.
+        Letters wait in `word` until the word ends, so a word is never split."""
+        out = []
+        for ch in text:
+            if ch == "\n":
+                out.append(self._word_out() + "\n")
+                self.col = 0
+            elif ch == " ":
+                out.append(self._word_out())
+                if self.col < self.limit:
+                    out.append(" ")
+                    self.col += 1
+            else:
+                self.word += ch
+        return "".join(out)
+
+    def write(self, text: str, style=None) -> None:
         if not self.on:
-            sys.stdout.write(text)
+            sys.stdout.write(style(text) if style else text)
             sys.stdout.flush()
             return
         with self.lock:
-            sys.stdout.write("\b \b" + text + self._frame())
+            out = ""
+            if style is not self.style:     # finish the pending word in its own style
+                out = self._word_out()
+                self.style = style
+            if not self.writing:            # first words: the header settles into the logo
+                self.writing = True
+                self.col = 2
+                sys.stdout.write(f"\r\033[K  {accent('■')} {bold('Tlav')}\n  ")
+            else:
+                sys.stdout.write("\b \b")
+            sys.stdout.write(out + self._flow(text) + self._frame())
             sys.stdout.flush()
 
     def stop(self) -> None:
@@ -102,7 +194,10 @@ class Mark:
         if self._thread and self._thread.is_alive():
             self._thread.join(timeout=1)
         with self.lock:
-            sys.stdout.write("\b \b")
+            if self.writing:
+                sys.stdout.write("\b \b" + self._word_out())
+            else:
+                sys.stdout.write("\r\033[K")
             sys.stdout.flush()
 
 
@@ -303,12 +398,12 @@ class Chat:
                 if state["kind"] is not None:
                     mark.write("\n\n  " if state["kind"] == "think" else "\n  ")
                 if kind == "think":
-                    mark.write(dim("thinking · "))
+                    mark.write("thinking · ", dim)
                 state["kind"] = kind
             out = chunk.replace("\n", "\n  ")
-            mark.write(dim(out) if kind == "think" else out)
+            mark.write(out, dim if kind == "think" else None)
 
-        mark.start("  ")   # the square circles from the moment you press Enter
+        mark.start("  ")   # the square starts moving the moment you press Enter
         try:
             ans = stream(self.url, prompt, self.temperature, self.max_tokens,
                          self.think if self.reasons else None, on_text)
@@ -405,7 +500,8 @@ class Chat:
 
     # -- loop
     def read(self) -> Optional[str]:
-        line = input(accent("› ") if _COLOR else "› ")
+        # \001/\002 tell readline the colour codes take no space, or the prompt shows them raw
+        line = input("\001\033[38;5;209m\002› \001\033[0m\002" if _COLOR else "› ")
         if line.strip() != '"""':
             return line.strip()
         lines = []

@@ -58,9 +58,21 @@ def test_mark_cursor_circles_and_cleans_up(capsys):
     m.stop()
     m.stop()  # second stop does nothing
     out = capsys.readouterr().out
-    assert "Hello" in out and out.endswith("\b \b")
+    assert out.endswith("\b \bHello")                        # pen erased, last word printed
     assert sum(out.count(f) for f in chat.Mark.FRAMES) >= 4   # it moved
-    assert out.count("\b \b") == 2                           # one before the text, one at the end
+    assert "Tlav" in out.split("Hello")[0]                    # header settled into the logo first
+    assert out.count("\b \b") == 1
+
+
+def test_mark_header_shows_old_computer_words(capsys):
+    import time
+    m = chat.Mark(enabled=True, interval=0.01, verb_every=0.02, verbs=["Dialing up", "Rewinding the tape"])
+    m.start()
+    time.sleep(0.08)
+    m.stop()
+    out = capsys.readouterr().out
+    assert "Dialing up…" in out and "Rewinding the tape…" in out   # phrases rotate
+    assert out.endswith("\r\033[K")                              # nothing left behind if no answer
 
 
 def test_mark_off_writes_plain_text(capsys):
@@ -69,3 +81,25 @@ def test_mark_off_writes_plain_text(capsys):
     m.write("Hi")
     m.stop()
     assert capsys.readouterr().out == "  Hi"
+
+
+def test_mark_wraps_words_with_indent(capsys):
+    m = chat.Mark(enabled=True, interval=10)
+    m.width = 20
+    m.start()
+    m.write("alpha beta gamma delta epsilon")
+    m.stop()
+    out = capsys.readouterr().out
+    import re
+    text = re.sub(r"\x1b\[[0-9;]*[mK]", "", out.split("Tlav")[-1])
+    vis = []
+    for ch in text:
+        if ch == "\b":
+            vis.pop()
+        else:
+            vis.append(ch)
+    lines = "".join(vis).split("\n")[1:]
+    assert not any(f in "".join(vis) for f in chat.Mark.FRAMES)   # no square left behind
+    assert all(len(l) <= 18 for l in lines)                      # room left for the square
+    assert all(l.startswith("  ") for l in lines)                # indent kept on wrapped lines
+    assert " ".join(w for l in lines for w in l.split()) == "alpha beta gamma delta epsilon"
