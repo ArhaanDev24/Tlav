@@ -8,6 +8,10 @@ That 2013 iMac in the corner, the ThinkPad in a drawer, the tower under the desk
 tlav setup
 ```
 
+> **Old PCs. New minds.** · Your old computer isn't dead. It's waiting. · Don't throw it out. Wake it up. · Two old laptops. One bigger brain. · Private AI from the computer you already own.
+
+Website: [`site/index.html`](site/index.html)
+
 One command. Tlav:
 
 1. **Detects** your hardware: RAM, CPU cores, AVX/AVX2/AVX-512, GPU, disk.
