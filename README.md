@@ -5,7 +5,7 @@
 That 2013 iMac in the corner, the ThinkPad in a drawer, the tower under the desk can all run a capable AI assistant, fully offline. And if one isn't enough, Tlav can **combine several old computers** to run a model none of them could hold alone.
 
 ```bash
-tlav setup
+tlav
 ```
 
 > **Old PCs. New minds.** · Your old computer isn't dead. It's waiting. · Don't throw it out. Wake it up. · Two old laptops. One bigger brain. · Private AI from the computer you already own.
@@ -16,10 +16,13 @@ One command. Tlav:
 
 1. **Detects** your hardware: RAM, CPU cores, AVX/AVX2/AVX-512, GPU, disk.
 2. **Benchmarks** memory bandwidth, which decides how fast a model can talk on a CPU, and self-calibrates against real runs.
-3. **Finds the best model**, either from its curated catalog or from **any GGUF model on Hugging Face** (`tlav search`), by reading each file's real architecture.
+3. **Finds the best model** for *this* PC: it ranks the catalog by your specs, then checks the top five against the files that really exist on Hugging Face (exact sizes, no weights downloaded) and tells you why the winner won. Any GGUF on Hugging Face works too (`tlav search`).
 4. **Makes it use less RAM** with measured, near-lossless compression and a compressed context cache, then **verifies the quality**.
 5. **Speeds it up** with speculative decoding, which gives exactly the same answers, faster.
-6. **Runs it**: a web chat in your browser plus an OpenAI-compatible API. It can also run at boot as an always-on AI box.
+6. **Measures it**: one quick speed test on the installed model; if your PC is slower than expected, Tlav offers a faster pick.
+7. **Opens the Tlav chat** in your terminal. A web chat and an OpenAI-compatible API run too, and it can start at boot as an always-on AI box.
+
+Next time, just type `tlav`: it starts your model and opens the chat.
 
 ---
 
@@ -56,16 +59,44 @@ Typical picks for a 2013 iMac (quad-core Haswell, DDR3-1600):
 
 | Setup | Best pick | RAM used | Speed |
 |---|---|---|---|
-| 2 GB (light Linux) | Gemma 3 1B or Qwen2.5 1.5B @ Q4_K_M | ~0.6–1.2 GB | ~5–10 tok/s |
-| 4 GB | Qwen2.5 3B @ Q4_K_M | ~2.2 GB | ~3 tok/s |
-| 8 GB | Qwen2.5 7B @ Q4_K_M | ~4.9 GB | ~3–4 tok/s |
-| 16 GB | Qwen3 8B @ Q4_K_M (+ draft model) | ~7 GB | ~3 tok/s, more with speculative decoding |
-| 32 GB | Qwen3 30B-A3B (MoE) @ Q5_K_M | ~21 GB | ~6–7 tok/s |
-| **two 16 GB PCs** | **Qwen3 30B-A3B (MoE) @ Q5_K_M, split 24 + 24 layers** | ~11 GB each | ~6–7 tok/s on Ethernet |
+| 2 GB (light Linux) | Qwen3.5 0.8B @ Q4_K_M | ~0.8 GB | fast |
+| 4 GB | Qwen3.5 2B @ Q8_0 | ~2.3 GB | ~8 tok/s |
+| 8 GB | Qwen3.5 4B @ Q5_K_M | ~3.8 GB | ~5 tok/s |
+| 16 GB | Qwen3.5 9B @ Q4_K_M | ~6.7 GB | ~2.5–3 tok/s |
+| **two 16 GB PCs** | **Qwen3.6 35B-A3B (MoE) @ Q4_K_M, split across both** | ~11 GB each | ~7 tok/s on Ethernet |
 
 `tlav setup --min-tps 5` prefers faster models, and `tlav setup --task code` picks coding models.
 
 ---
+
+## The Tlav chat
+
+`tlav` (or `tlav chat`) opens a chat in your terminal and starts your model if it isn't running. Answers stream as they are written, with the speed shown after each one. Conversations are kept on your disk only.
+
+```
+  ■ Tlav  Qwen3.5 9B  Q4_K_M
+    this PC · 8192 tokens of memory · offline · reasoning off
+    Type a message. /help for commands, Ctrl+C stops an answer.
+
+› Explain RAM like I'm ten
+  RAM is your computer's desk...
+  64 tokens · 2.8 tokens/s · 23.1s
+```
+
+| Command | |
+|---|---|
+| `/new` | fresh conversation (the previous one is kept as `last`) |
+| `/system TEXT` | how the assistant should behave |
+| `/think on\|off` | let reasoning models think first: smarter, slower (on by default only on fast PCs) |
+| `/temp X` | 0 = precise, 1 = creative |
+| `/save NAME`, `/load NAME`, `/list` | keep and reopen conversations |
+| `/copy` | copy the last answer |
+| `/stats` | speed, memory, context used |
+| `/web` | open the browser chat |
+| `/stop` | stop the model and free its memory |
+| `"""` | start/end a message with several lines |
+
+Old turns are left out automatically when a long chat no longer fits the model's memory. `tlav chat --model file.gguf` chats with any file; `tlav chat --url http://host:8080` with a Tlav on another PC.
 
 ## Combine computers (cluster mode)
 
@@ -136,7 +167,8 @@ A bigger model compressed to Q4_K_M almost always beats a smaller model kept at 
 
 | Command | What it does |
 |---|---|
-| `tlav setup` | Everything: detect → benchmark → pick → download/compress → tune → run |
+| `tlav` | Set up on first run, then open the chat |
+| `tlav setup` | Everything: detect → benchmark → pick → download/compress → speed test → chat (`--web` for the browser) |
 | `tlav setup --cluster` / `--hf REPO` / `--max-quality` | Use workers / any Hugging Face model / near-lossless only |
 | `tlav doctor` | Hardware report, RAM budget, cluster support |
 | `tlav bench [--real]` | Bandwidth benchmark; `--real` measures true tok/s and calibrates future estimates |
@@ -147,7 +179,7 @@ A bigger model compressed to Q4_K_M almost always beats a smaller model kept at 
 | `tlav compress --file X-f16.gguf --to Q4_K_M --kv-check` | Compress your own model |
 | `tlav run [--detach] [--host 0.0.0.0]` | Start the server + web chat (0.0.0.0 = usable from phones/other PCs) |
 | `tlav status` / `tlav stop` | What's running and how much memory it really uses / stop it |
-| `tlav chat` | Chat in the terminal |
+| `tlav chat` | The Tlav chat (starts your model if needed) |
 | `tlav worker` | Share this PC's RAM and CPU with a main computer |
 | `tlav cluster scan/add/list/remove/clear` | Manage workers |
 | `tlav service install [--worker]` | Start at login (launchd / systemd / Task Scheduler): an always-on AI box |
