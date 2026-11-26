@@ -134,13 +134,6 @@ code { font-family: var(--mono); font-size: .92em; }
 .js .reveal.pre { transform: translateY(28px); opacity: 0; }
 
 /* ---------- section label + textures ---------- */
-.textured { position: relative; isolation: isolate; }
-.textured::before { content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
-  background-image: radial-gradient(var(--dot) 1.2px, transparent 1.6px); background-size: 22px 22px;
-  -webkit-mask-image: radial-gradient(70% 90% at 100% 0%, #000, transparent 70%); mask-image: radial-gradient(70% 90% at 100% 0%, #000, transparent 70%); }
-.textured.left::before { -webkit-mask-image: radial-gradient(70% 90% at 0% 100%, #000, transparent 70%); mask-image: radial-gradient(70% 90% at 0% 100%, #000, transparent 70%); }
-.ghost-arrow { position: absolute; right: max(20px, 4vw); top: clamp(40px, 6vw, 80px); width: clamp(60px, 7vw, 96px); opacity: .9; }
-.ghost-arrow rect { fill: var(--pixel); }
 
 /* ---------- fit tool ---------- */
 .tool { padding: clamp(22px, 4vw, 44px); background: var(--surface); box-shadow: 0 0 0 1px var(--line); display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 24px; align-items: start; }
@@ -318,7 +311,6 @@ footer a:hover { color: var(--ink); }
   .split-head h2, .split-head p { grid-column: 1 / -1; }
   .picker, .answer { grid-column: 1 / -1; }
   .steps, .nums { grid-template-columns: minmax(0, 1fr); }
-  .ghost-arrow { width: 54px; }
   .prompts, .chatwrap { grid-column: 1 / -1; }
   .cstats { grid-template-columns: repeat(3, auto) minmax(0, 1fr); }
   .replay { grid-column: 1 / -1; justify-self: start; }
@@ -433,7 +425,7 @@ footer a:hover { color: var(--ink); }
     </div>
   </section>
 
-  <section class="sec textured" id="fit" aria-labelledby="fit-title">
+  <section class="sec" id="fit" aria-labelledby="fit-title">
     <div class="wrap">
       <div class="split-head reveal">
         <h2 id="fit-title">What can your computer run?</h2>
@@ -462,7 +454,7 @@ footer a:hover { color: var(--ink); }
     </div>
   </section>
 
-  <section class="sec tint textured left" id="try" aria-labelledby="try-title">
+  <section class="sec tint" id="try" aria-labelledby="try-title">
     <div class="wrap">
       <div class="split-head reveal">
         <h2 id="try-title">Feel the speed.</h2>
@@ -546,8 +538,7 @@ footer a:hover { color: var(--ink); }
     </div>
   </section>
 
-  <section class="sec final textured" id="install" aria-labelledby="install-title" style="position:relative">
-    <svg class="ghost-arrow px" id="arrow2" viewBox="0 0 11 11" aria-hidden="true"></svg>
+  <section class="sec final" id="install" aria-labelledby="install-title" style="position:relative">
     <div class="wrap reveal">
       <h2 id="install-title">Don't throw it out. Wake it up<span class="dot"></span></h2>
       <div class="cmd"><code>git clone https://github.com/ArhaanDev24/Tlavv &amp;&amp; cd Tlavv &amp;&amp; ./install.sh</code><button class="copy" type="button">Copy</button></div>
@@ -813,7 +804,6 @@ footer a:hover { color: var(--ink); }
   }
 
   /* second pixel arrow + memory cells */
-  cellsA.forEach(([x, y]) => { const r = document.createElementNS(NS, "rect"); r.setAttribute("x", x); r.setAttribute("y", y); r.setAttribute("width", 1.02); r.setAttribute("height", 1.02); $("arrow2").appendChild(r); });
   ["memA", "memB"].forEach((id) => { for (let i = 0; i < 20; i++) { const c = document.createElement("i"); c.style.setProperty("--i", i); $(id).appendChild(c); } });
 
   /* cluster layers */
