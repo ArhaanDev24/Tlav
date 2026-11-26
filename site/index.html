@@ -190,22 +190,23 @@ input[type=range]::-moz-range-thumb { width: 18px; height: 18px; background: var
 .chap.on span { max-height: 3em; }
 .progress { height: 2px; background: var(--line); margin-top: 18px; }
 .progress i { position: relative; display: block; height: 100%; width: calc(var(--sp, 0) * 100%); background: linear-gradient(90deg, var(--ink), var(--pixel)); }
-.progress i::after { content: ""; position: absolute; right: -4px; top: -3px; width: 8px; height: 8px; background: var(--pixel); box-shadow: 0 0 12px var(--pixel); }
-.chap.on b::after { content: ""; display: inline-block; width: 7px; height: 7px; margin-left: 10px; vertical-align: 3px; background: var(--pixel); animation: blink 1s steps(1) infinite; }
+.progress i::after { content: ""; position: absolute; right: -3px; top: -2px; width: 6px; height: 6px; background: var(--pixel); }
+.chap.on b::after { content: ""; display: inline-block; width: 7px; height: 7px; margin-left: 10px; vertical-align: 3px; background: var(--pixel); animation: breathe 2.4s ease-in-out infinite; }
+@keyframes breathe { 50% { opacity: .25; } }
 .window { --rx: 0deg; --ry: 0deg; grid-column: 6 / span 7; background: var(--surface); aspect-ratio: 16 / 11; display: flex; flex-direction: column; overflow: hidden; position: relative;
-  box-shadow: 0 0 0 1px var(--line), 0 40px 90px -30px rgba(23, 28, 19, .28), 0 30px 120px -40px color-mix(in srgb, var(--pixel) 45%, transparent);
-  transform: perspective(1400px) rotateX(var(--rx)) rotateY(var(--ry)); transition: transform .5s var(--ease); will-change: transform; }
+  box-shadow: 0 0 0 1px var(--line), 0 30px 70px -30px rgba(23, 28, 19, .22), 0 24px 90px -50px color-mix(in srgb, var(--pixel) 30%, transparent);
+  transform: perspective(1800px) rotateX(var(--rx)) rotateY(var(--ry)); transition: transform 1.2s var(--ease); will-change: transform; }
 .fx { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 5; }
-.scanline { position: absolute; left: 0; right: 0; top: 0; height: 2px; background: linear-gradient(90deg, transparent, var(--pixel), transparent); box-shadow: 0 0 18px 4px color-mix(in srgb, var(--pixel) 45%, transparent); animation: scan 2.6s linear infinite; }
-.scanline::after { content: ""; position: absolute; left: 0; right: 0; bottom: 2px; height: 60px; background: linear-gradient(0deg, color-mix(in srgb, var(--pixel) 10%, transparent), transparent); }
+.scanline { position: absolute; left: 0; right: 0; top: 0; height: 1px; background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--pixel) 70%, transparent), transparent); box-shadow: 0 0 8px 1px color-mix(in srgb, var(--pixel) 25%, transparent); animation: scan 5s ease-in-out infinite alternate; }
+.scanline::after { content: ""; position: absolute; left: 0; right: 0; bottom: 1px; height: 30px; background: linear-gradient(0deg, color-mix(in srgb, var(--pixel) 5%, transparent), transparent); }
 @keyframes scan { from { top: 0; } to { top: 100%; } }
-.fresh { color: var(--pixel); text-shadow: 0 0 12px color-mix(in srgb, var(--pixel) 40%, transparent); }
+.fresh { color: color-mix(in srgb, var(--pixel) 75%, var(--ink)); }
 .win-bar { display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--line); font: 12px var(--mono); color: var(--muted); }
 .win-bar i { width: 9px; height: 9px; background: var(--line); }
 .win-bar i:first-child { background: var(--pixel); }
 .win-bar span { margin-left: 8px; } .win-bar em { margin-left: auto; font-style: normal; }
 .win-body { position: relative; flex: 1; }
-.scene { position: absolute; inset: 0; padding: clamp(18px, 3vw, 36px); display: grid; align-content: center; gap: 14px; opacity: 0; transform: translateY(12px); transition: opacity .5s var(--ease), transform .5s var(--ease); pointer-events: none; }
+.scene { position: absolute; inset: 0; padding: clamp(18px, 3vw, 36px); display: grid; align-content: center; gap: 14px; opacity: 0; transform: translateY(6px); transition: opacity .9s var(--ease), transform .9s var(--ease); pointer-events: none; }
 .scene.on { opacity: 1; transform: none; }
 .kv { display: grid; grid-template-columns: 9em 1fr auto; gap: 10px 16px; align-items: center; font-size: 15px; }
 .kv span { color: var(--muted); }
@@ -215,14 +216,14 @@ input[type=range]::-moz-range-thumb { width: 18px; height: 18px; background: var
 .meter i.on { background: var(--deep); }
 .meter.hot i.on { background: var(--pixel); }
 .cands { display: grid; gap: 6px; }
-.cand { display: grid; grid-template-columns: 1fr auto auto; gap: 16px; padding: 10px 14px; font-size: 15px; background: var(--bg); transition: opacity .5s var(--ease), transform .5s var(--ease), background-color .4s, color .4s, box-shadow .4s; }
+.cand { display: grid; grid-template-columns: 1fr auto auto; gap: 16px; padding: 10px 14px; font-size: 15px; background: var(--bg); transition: opacity .9s var(--ease), transform .9s var(--ease), background-color .8s, color .8s, box-shadow .8s; }
 .cand span { font: 13px var(--mono); color: var(--muted); }
-.cand.out { opacity: .22; text-decoration: line-through; transform: translateX(28px); }
-.cand.win { background: var(--deep); color: var(--on-deep); transform: scale(1.035); box-shadow: 0 0 0 2px var(--pixel), 0 16px 40px -12px color-mix(in srgb, var(--pixel) 70%, transparent); }
+.cand.out { opacity: .3; text-decoration: line-through; transform: translateX(10px); }
+.cand.win { background: var(--deep); color: var(--on-deep); transform: scale(1.012); box-shadow: 0 0 0 1px var(--pixel), 0 10px 26px -14px color-mix(in srgb, var(--pixel) 50%, transparent); }
 .cand.win span { color: color-mix(in srgb, var(--on-deep) 70%, transparent); }
 .shrink { display: grid; grid-template-columns: auto 1fr; gap: 22px; align-items: center; }
 .block { display: grid; grid-template-columns: repeat(16, 10px); gap: 3px; }
-.block i { width: 10px; height: 10px; background: var(--deep); transition: background-color .25s, transform .3s var(--ease); }
+.block i { width: 10px; height: 10px; background: var(--deep); transition: background-color .7s, transform .8s var(--ease); }
 .block i.gone { transform: scale(.4); }
 .block i.gone { background: transparent; box-shadow: inset 0 0 0 1px var(--line); }
 .big { font: 600 clamp(34px, 4vw, 56px)/1 var(--sans); letter-spacing: -0.05em; font-variant-numeric: tabular-nums; }
@@ -762,8 +763,8 @@ footer a:hover { color: var(--ink); }
   const burst = (x, y, n, spread = 1, up = 0) => {
     if (reduced) return;
     for (let i = 0; i < n; i++) {
-      const a = Math.random() * 6.28, s = (1 + Math.random() * 3) * spread;
-      parts2.push({ x, y, vx: Math.cos(a) * s + up * .6, vy: Math.sin(a) * s - up, life: 1, sz: 3 + Math.random() * 4, c: Math.random() < .75 ? col.px : col.soft });
+      const a = Math.random() * 6.28, s = (.25 + Math.random() * .7) * spread;
+      parts2.push({ x, y, vx: Math.cos(a) * s + up * .15, vy: Math.sin(a) * s - up * .35, life: 1, sz: 2 + Math.random() * 2, c: Math.random() < .75 ? col.px : col.soft });
     }
     wakeFx();
   };
@@ -782,8 +783,8 @@ footer a:hover { color: var(--ink); }
     }
     parts2 = parts2.filter((q) => q.life > 0);
     for (const q of parts2) {
-      q.x += q.vx; q.y += q.vy; q.vy += .05; q.vx *= .985; q.life -= .018;
-      fg.globalAlpha = Math.max(0, q.life); fg.fillStyle = q.c; fg.fillRect(Math.round(q.x), Math.round(q.y), Math.round(q.sz), Math.round(q.sz));
+      q.x += q.vx; q.y += q.vy; q.vy += .008; q.vx *= .99; q.life -= .007;
+      fg.globalAlpha = Math.max(0, q.life) * .7; fg.fillStyle = q.c; fg.fillRect(Math.round(q.x), Math.round(q.y), Math.round(q.sz), Math.round(q.sz));
     }
     fg.globalAlpha = 1;
   };
@@ -795,7 +796,7 @@ footer a:hover { color: var(--ink); }
   const pin = story.querySelector(".story-pin");
   if (!reduced && matchMedia("(pointer: fine)").matches) {
     pin.addEventListener("pointermove", (e) => { const r = win.getBoundingClientRect(), x = (e.clientX - r.left) / r.width - .5, y = (e.clientY - r.top) / r.height - .5;
-      win.style.setProperty("--ry", (x * 6).toFixed(2) + "deg"); win.style.setProperty("--rx", (-y * 5).toFixed(2) + "deg"); });
+      win.style.setProperty("--ry", (x * 2.4).toFixed(2) + "deg"); win.style.setProperty("--rx", (-y * 2).toFixed(2) + "deg"); });
     pin.addEventListener("pointerleave", () => { win.style.setProperty("--ry", "0deg"); win.style.setProperty("--rx", "0deg"); });
   }
 
@@ -805,7 +806,6 @@ footer a:hover { color: var(--ink); }
     if (idx !== lastScene) {
       scenes.forEach((s, i) => s.classList.toggle("on", i === idx));
       chaps.forEach((c, i) => c.classList.toggle("on", i === idx));
-      if (lastScene !== -1 && !reduced) { wipeT = performance.now(); wakeFx(); }
       $("winStatus").textContent = statusTxt[idx]; lastScene = idx;
     }
     if (idx === 0) {
@@ -817,17 +817,17 @@ footer a:hover { color: var(--ink); }
       const step = Math.floor(sp * 5), out = [0, 1, 3, 4];
       cands.forEach((c, i) => { c.classList.toggle("out", out.includes(i) && out.indexOf(i) < step); c.classList.toggle("win", i === 2 && step >= 4); });
       const won = step >= 4;
-      if (won && !lastWin) { const r = rel(cands[2]); burst(r.x + r.w / 2, r.y + r.h / 2, 46, 1.4); }
+      if (won && !lastWin) { const r = rel(cands[2]); burst(r.x + r.w / 2, r.y + r.h / 2, 12, 1); }
       lastWin = won;
     }
     if (idx === 2) {
       const k = Math.min(1, sp * 1.3), keepCols = Math.round(16 - k * 11);
       [...blockCells].forEach((c, i) => c.classList.toggle("gone", i % 16 >= keepCols));
-      if (keepCols < lastKeep) for (let cc = keepCols; cc < lastKeep; cc++) for (let row = 0; row < 10; row += 2) {
-        const r = rel(blockCells[row * 16 + cc]); burst(r.x + r.w / 2, r.y + r.h / 2, 2, .7, 1.2);
+      if (keepCols < lastKeep) for (let cc = keepCols; cc < lastKeep; cc++) for (let row = 1; row < 10; row += 4) {
+        const r = rel(blockCells[row * 16 + cc]); burst(r.x + r.w / 2, r.y + r.h / 2, 1, .6, 1);
       }
       lastKeep = keepCols;
-      if (k >= 1 && !lastOk) { const r = rel($("qual")); burst(r.x + r.w, r.y + r.h / 2, 24, 1); }
+      if (k >= 1 && !lastOk) { const r = rel($("qual")); burst(r.x + r.w, r.y + r.h / 2, 8, .8); }
       lastOk = k >= 1;
       $("size").textContent = (16.4 - k * 11.5).toFixed(1) + " GB";
       $("qual").textContent = (100 - k * 2.5).toFixed(1) + "%";
