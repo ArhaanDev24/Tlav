@@ -28,7 +28,7 @@ curl -fsSL https://raw.githubusercontent.com/OWNER/Tlav/main/install.sh | bash
 ```
 or, from a clone:
 ```bash
-git clone https://github.com/OWNER/Tlav && cd Tlav && ./install.sh
+git clone https://github.com/ArhaanDev24/Tlavv && cd Tlavv && ./install.sh
 ```
 
 **Windows (PowerShell)**
