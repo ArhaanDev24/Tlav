@@ -771,7 +771,7 @@ footer a:hover { color: var(--ink); }
   let dev = 0, timer = null, userAsked = false, cur = 0, thinkTimer = null;
   const timers = [];
   // what Tlav says while the old computer gets going
-  const VERBS = ["Booting up", "Warming the vacuum tubes", "Spinning up the hard drive", "Defragmenting thoughts", "Dialing up", "Rewinding the tape", "Loading from floppy", "Paging in memory", "Blowing on the cartridge", "Shuffling punch cards", "Consulting the BIOS", "Waking the old CPU", "Reticulating bits", "Tlaving"];
+  const VERBS = ["Defragmenting the C: drive", "Blowing dust out of the fan", "Waiting for the dial-up handshake", "Rewinding the cassette with a pencil", "Inserting disk 2 of 7", "Warming up the CRT", "Pressing any key", "Turning it off and on again", "Blowing on the cartridge", "Degaussing the monitor", "Spinning up the 5,400 RPM drive", "Feeding the punch cards", "Consulting the BIOS", "Counting to 640K", "Checking the turbo button", "Calibrating the ball mouse", "Untangling the printer cable", "Paging to swap, sorry", "Waiting for the screensaver to finish", "Adjusting the rabbit ears", "Rebooting the hamster wheel", "Asking the paperclip for help", "Compiling, go make some tea", "Tlaving"];
   const chatlog = $("chatlog");
   const stats = (tps) => { $("dTps").textContent = tps.toFixed(1); };
   const finalStats = (k) => { const tok = REPLIES[k].split(/\s+/).length * TPW, tps = DEVICES[dev].tps; stats(tps, tok, tok / tps, 1); };
