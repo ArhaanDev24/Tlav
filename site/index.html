@@ -12,39 +12,23 @@
 /* Layout: one quiet column of large type on sage, generous space, a 12-col grid for the few
    two-part sections. Pixels (orange) are the only ornament; motion is slow and purposeful. */
 :root {
-  --bg: #e3e7dd;          /* sage paper */
-  --surface: #edf0e8;
-  --ink: #171c13;
-  --muted: #5d6655;
-  --line: #c9d0bf;
-  --dot: #bac3ad;
-  --deep: #29402e;        /* forest: type band, model share */
-  --on-deep: #e3e7dd;
-  --pixel: #f2683c;       /* signal orange */
-  --pixel-soft: #f7c8b4;
-  --sys: #aab39d;
+  --bg: #eef2e8;          /* bright sage */
+  --surface: #f8faf5;
+  --ink: #1a2016;
+  --muted: #646d5b;
+  --line: #d6dccd;
+  --dot: #c6cfba;
+  --deep: #2f5a3a;        /* fresh forest: type band, model share */
+  --on-deep: #f3f6ee;
+  --pixel: #ff6d3a;       /* signal orange */
+  --pixel-soft: #ffd2bf;
+  --sys: #b3bca6;
   --sans: "Inter Tight", "Helvetica Neue", Helvetica, Arial, sans-serif;
   --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --gl: max(20px, env(safe-area-inset-left, 0px));
   --gr: max(20px, env(safe-area-inset-right, 0px));
   --ease: cubic-bezier(.2, .7, .1, 1);
   color-scheme: light;
-}
-/* Sage Deep: a shade darker, calmer contrast */
-:root[data-palette="deep"] {
-  --bg: #d0d7c8; --surface: #dce2d5; --ink: #10150d; --muted: #4a5343; --line: #b4bea8; --dot: #a4af95;
-  --deep: #1c2d20; --on-deep: #dfe5d8; --pixel: #e65a2b; --pixel-soft: #efb49a; --sys: #97a288;
-}
-/* Sage Bright: airy, fresher green */
-:root[data-palette="bright"] {
-  --bg: #eef2e8; --surface: #f8faf5; --ink: #1a2016; --muted: #646d5b; --line: #d6dccd; --dot: #c6cfba;
-  --deep: #2f5a3a; --on-deep: #f3f6ee; --pixel: #ff6d3a; --pixel-soft: #ffd2bf; --sys: #b3bca6;
-}
-/* Forest & Gold: dark forest with gold */
-:root[data-palette="gold"] {
-  --bg: #19211b; --surface: #202a23; --ink: #eee9da; --muted: #a5aa9a; --line: #313c34; --dot: #39463c;
-  --deep: #c9a54c; --on-deep: #19211b; --pixel: #e2bb57; --pixel-soft: #5c4c25; --sys: #48544a;
-  color-scheme: dark;
 }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
@@ -141,11 +125,10 @@ code { font-family: var(--mono); font-size: .92em; }
   background-image: radial-gradient(var(--dot) 1.2px, transparent 1.6px); background-size: 22px 22px;
   -webkit-mask-image: radial-gradient(70% 90% at 100% 0%, #000, transparent 70%); mask-image: radial-gradient(70% 90% at 100% 0%, #000, transparent 70%); }
 .textured.left::before { -webkit-mask-image: radial-gradient(70% 90% at 0% 100%, #000, transparent 70%); mask-image: radial-gradient(70% 90% at 0% 100%, #000, transparent 70%); }
-.dark { background: var(--deep); color: var(--on-deep); --line: color-mix(in srgb, var(--on-deep) 18%, transparent); --muted: color-mix(in srgb, var(--on-deep) 66%, var(--deep)); --dot: color-mix(in srgb, var(--on-deep) 16%, var(--deep)); }
-.dark .kicker { color: var(--muted); }
-.dark { --hi: var(--pixel); }
-:root[data-palette="gold"] .dark { --hi: var(--on-deep); }
-.dark .kicker::before { background: var(--hi); }
+.pulse { position: relative; isolation: isolate; overflow: hidden; }
+.pfield { position: absolute; z-index: -1; width: min(60vw, 720px); height: min(80%, 560px); pointer-events: none; }
+.pfield.tr { top: 0; right: 0; }
+.pfield.bl { bottom: 0; left: 0; height: min(42%, 340px); }
 .ghost-arrow { position: absolute; right: max(20px, 4vw); top: clamp(40px, 6vw, 80px); width: clamp(60px, 7vw, 96px); opacity: .9; }
 .ghost-arrow rect { fill: var(--pixel); }
 
@@ -257,10 +240,9 @@ input[type=range]::-moz-range-thumb { width: 18px; height: 18px; background: var
 /* ---------- cluster ---------- */
 .layers { display: grid; grid-template-columns: repeat(48, minmax(0, 1fr)); gap: 4px; position: relative; }
 .layers i { height: clamp(36px, 5vw, 64px); background: var(--deep); transform-origin: bottom; transition: transform .7s var(--ease); transition-delay: calc(var(--i) * 14ms); }
-.layers i { background: var(--on-deep); }
-.layers i.b { background: color-mix(in srgb, var(--on-deep) 38%, var(--deep)); }
+.layers i.b { background: color-mix(in srgb, var(--deep) 40%, var(--bg)); }
 .js .layers.pre i { transform: scaleY(0); }
-.layers .tok { position: absolute; top: -14px; left: 0; width: 8px; height: 8px; background: var(--on-deep); animation: run 3.6s cubic-bezier(.45, 0, .55, 1) infinite; }
+.layers .tok { position: absolute; top: -14px; left: 0; width: 8px; height: 8px; background: var(--pixel); animation: run 3.6s cubic-bezier(.45, 0, .55, 1) infinite; }
 @keyframes run { from { left: 0; } to { left: calc(100% - 8px); } }
 .who { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-top: 16px; }
 .who div { display: grid; gap: 2px; }
@@ -271,20 +253,20 @@ input[type=range]::-moz-range-thumb { width: 18px; height: 18px; background: var
 .nums { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: clamp(24px, 4vw, 56px); }
 .num { display: grid; gap: 14px; align-content: start; padding-top: 24px; border-top: 1px solid var(--line); }
 .num b { font: 600 clamp(56px, 7vw, 104px)/.9 var(--sans); letter-spacing: -0.06em; font-variant-numeric: tabular-nums; }
-.num b small { font-size: .36em; letter-spacing: -0.02em; margin-left: 4px; color: var(--hi, var(--pixel)); font-weight: 500; }
+.num b small { font-size: .36em; letter-spacing: -0.02em; margin-left: 4px; color: var(--pixel); font-weight: 500; }
 .num p { color: var(--muted); max-width: 30ch; }
 .chart { display: grid; gap: 10px; margin-top: 6px; }
 .bar { display: grid; grid-template-columns: 7.5em 1fr; gap: 12px; align-items: center; font: 12px var(--mono); color: var(--muted); }
-.bar .track { height: 10px; background: color-mix(in srgb, var(--on-deep) 10%, transparent); position: relative; }
-.bar .track i { position: absolute; inset: 0 auto 0 0; width: var(--w); background: color-mix(in srgb, var(--on-deep) 55%, transparent); transform-origin: left; transition: transform 1.2s var(--ease) .2s; }
-.bar.hi .track i { background: var(--hi, var(--pixel)); }
-.bar .track span { position: absolute; right: 0; top: -18px; color: var(--on-deep); }
+.bar .track { height: 10px; background: var(--line); position: relative; }
+.bar .track i { position: absolute; inset: 0 auto 0 0; width: var(--w); background: var(--sys); transform-origin: left; transition: transform 1.2s var(--ease) .2s; }
+.bar.hi .track i { background: var(--pixel); }
+.bar .track span { position: absolute; right: 0; top: -18px; color: var(--ink); }
 .js .num.pre .bar .track i { transform: scaleX(0); }
 .mem { display: grid; grid-template-columns: repeat(20, minmax(0, 1fr)); gap: 3px; }
-.mem i { aspect-ratio: 1; background: color-mix(in srgb, var(--on-deep) 50%, transparent); transition: background-color .4s, opacity .4s; transition-delay: calc(var(--i) * 30ms + .3s); }
-.mem.half i:nth-child(n+11) { background: transparent; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--on-deep) 18%, transparent); }
-.mem.half i:nth-child(-n+10) { background: var(--hi, var(--pixel)); }
-.js .num.pre .mem.half i { background: color-mix(in srgb, var(--on-deep) 50%, transparent); box-shadow: none; }
+.mem i { aspect-ratio: 1; background: var(--sys); transition: background-color .4s, opacity .4s; transition-delay: calc(var(--i) * 30ms + .3s); }
+.mem.half i:nth-child(n+11) { background: transparent; box-shadow: inset 0 0 0 1px var(--line); }
+.mem.half i:nth-child(-n+10) { background: var(--pixel); }
+.js .num.pre .mem.half i { background: var(--sys); box-shadow: none; }
 
 /* ---------- install ---------- */
 .final { text-align: left; }
@@ -301,13 +283,6 @@ footer { padding-block: 28px calc(28px + env(safe-area-inset-bottom, 0px)); bord
 footer .wrap { display: flex; flex-wrap: wrap; gap: 12px 28px; justify-content: space-between; }
 footer a { text-decoration: none; }
 footer a:hover { color: var(--ink); }
-
-/* ---------- palette switcher ---------- */
-.palette { position: fixed; z-index: 45; right: max(16px, env(safe-area-inset-right, 0px)); bottom: calc(16px + env(safe-area-inset-bottom, 0px)); display: flex; align-items: center; gap: 4px; padding: 6px 6px 6px 12px; background: var(--surface); box-shadow: 0 0 0 1px var(--line), 0 12px 30px rgba(0, 0, 0, .12); font: 500 12px var(--mono); color: var(--muted); }
-.palette span { margin-right: 4px; }
-.palette button { width: 30px; height: 30px; padding: 4px; border: 1px solid transparent; background: transparent; cursor: pointer; }
-.palette button[aria-pressed="true"] { border-color: var(--ink); }
-.palette i { display: block; width: 100%; height: 100%; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .12); }
 
 /* ---------- responsive ---------- */
 @media (max-width: 960px) {
@@ -496,7 +471,8 @@ footer a:hover { color: var(--ink); }
     </div>
   </section>
 
-  <section class="sec dark textured left" id="cluster" aria-labelledby="cluster-title">
+  <section class="sec pulse" id="cluster" aria-labelledby="cluster-title">
+    <canvas class="pfield bl" aria-hidden="true"></canvas>
     <div class="wrap">
       <div class="split-head reveal">
         <span class="kicker">04 · Cluster</span>
@@ -510,7 +486,8 @@ footer a:hover { color: var(--ink); }
     </div>
   </section>
 
-  <section class="sec dark textured" id="results" aria-labelledby="results-title">
+  <section class="sec tint pulse" id="results" aria-labelledby="results-title">
+    <canvas class="pfield tr" aria-hidden="true"></canvas>
     <div class="wrap">
       <div class="split-head reveal">
         <span class="kicker">05 · Measured</span>
@@ -555,14 +532,6 @@ footer a:hover { color: var(--ink); }
     </div>
   </section>
 </main>
-
-<div class="palette" role="group" aria-label="Colour combination" id="palette">
-  <span>Colour</span>
-  <button type="button" data-p="sage" aria-pressed="true" title="Sage"><i style="background:linear-gradient(135deg,#e3e7dd 50%,#29402e 50% 80%,#f2683c 80%)"></i></button>
-  <button type="button" data-p="deep" aria-pressed="false" title="Sage Deep"><i style="background:linear-gradient(135deg,#d0d7c8 50%,#1c2d20 50% 80%,#e65a2b 80%)"></i></button>
-  <button type="button" data-p="bright" aria-pressed="false" title="Sage Bright"><i style="background:linear-gradient(135deg,#f8faf5 50%,#2f5a3a 50% 80%,#ff6d3a 80%)"></i></button>
-  <button type="button" data-p="gold" aria-pressed="false" title="Forest &amp; Gold"><i style="background:linear-gradient(135deg,#19211b 50%,#c9a54c 50%)"></i></button>
-</div>
 
 <footer>
   <div class="wrap"><span>© Tlav · MIT License</span><a href="https://github.com/ArhaanDev24/Tlavv" target="_blank" rel="noopener">GitHub</a></div>
@@ -781,19 +750,48 @@ footer a:hover { color: var(--ink); }
   cellsA.forEach(([x, y]) => { const r = document.createElementNS(NS, "rect"); r.setAttribute("x", x); r.setAttribute("y", y); r.setAttribute("width", 1.02); r.setAttribute("height", 1.02); $("arrow2").appendChild(r); });
   ["memA", "memB"].forEach((id) => { for (let i = 0; i < 20; i++) { const c = document.createElement("i"); c.style.setProperty("--i", i); $(id).appendChild(c); } });
 
-  /* colour combinations */
-  const palBtns = document.querySelectorAll("#palette button");
-  const setPal = (pal) => {
-    if (pal === "sage") delete root.dataset.palette; else root.dataset.palette = pal;
-    palBtns.forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.p === pal)));
-    col.dot = css("--dot"); col.px = css("--pixel"); col.soft = css("--pixel-soft"); draw(performance.now());
-    try { localStorage.setItem("tlav-palette", pal); } catch (_) {}
-  };
-  palBtns.forEach((b) => b.addEventListener("click", () => setPal(b.dataset.p)));
-  let pal0 = (location.hash.match(/^#palette-(sage|deep|bright|gold)$/) || [])[1];
-  if (!pal0) { try { pal0 = localStorage.getItem("tlav-palette"); } catch (_) {} }
-  if (["deep", "bright", "gold"].includes(pal0)) setPal(pal0);
-  addEventListener("hashchange", () => { const m = location.hash.match(/^#palette-(sage|deep|bright|gold)$/); if (m) setPal(m[1]); });
+  /* pulsing pixel fields in the results and cluster sections */
+  document.querySelectorAll(".pfield").forEach((cv) => {
+    const g = cv.getContext("2d"), corner = cv.classList.contains("tr") ? "tr" : "bl";
+    let w = 0, h = 0, pts = [], on = false, pulses = [], next = 0;
+    const size = () => {
+      const r = cv.getBoundingClientRect(), dpr = Math.min(2, devicePixelRatio || 1);
+      w = r.width; h = r.height; cv.width = w * dpr; cv.height = h * dpr; g.setTransform(dpr, 0, 0, dpr, 0, 0);
+      pts = []; let s = corner === "tr" ? 29 : 31; const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
+      for (let y = 11; y < h; y += 22) for (let x = 11; x < w; x += 22) {
+        const fx = corner === "tr" ? x / w : 1 - x / w, fy = corner === "tr" ? 1 - y / h : y / h;
+        const near = Math.max(0, fx * .9 + fy * .9 - .8);          // 0 far from the corner, ~1 at it
+        if (near <= 0 && rnd() > .5) continue;
+        pts.push({ x, y, near, lit: rnd() < near * .55, ph: rnd() * 6.28, sp: .5 + rnd() });
+      }
+    };
+    const origin = () => corner === "tr" ? { x: w - 20, y: 20 } : { x: 20, y: h - 20 };
+    const paint = (t) => {
+      g.clearRect(0, 0, w, h);
+      const o = origin();
+      for (const c of pts) {
+        let wave = 0;
+        for (const pu of pulses) { const r = (t - pu) * .42, band = Math.abs(Math.hypot(c.x - o.x, c.y - o.y) - r); if (band < 24) wave = Math.max(wave, (1 - band / 24) * Math.max(0, 1 - r / 900)); }
+        const tw = reduced ? .8 : .5 + .5 * Math.sin(t / 1000 * c.sp + c.ph);
+        const a = Math.max(c.lit ? tw : 0, wave);
+        const fade = Math.min(1, c.near * 1.6 + .25);
+        if (a > .08) {
+          const sz = 3 + 3 * a; g.globalAlpha = (.25 + .75 * a) * fade; g.fillStyle = a > .65 ? col.px : col.soft;
+          g.fillRect(Math.round(c.x - sz / 2), Math.round(c.y - sz / 2), Math.round(sz), Math.round(sz));
+        } else { g.globalAlpha = .9 * fade; g.fillStyle = col.dot; g.fillRect(c.x - 1, c.y - 1, 2, 2); }
+      }
+      g.globalAlpha = 1;
+    };
+    const tick = (t) => {
+      if (!on) return;
+      if (t > next) { pulses.push(t); next = t + 4200; }
+      while (pulses.length && t - pulses[0] > 2600) pulses.shift();
+      paint(t); requestAnimationFrame(tick);
+    };
+    size(); paint(performance.now());
+    addEventListener("resize", () => { size(); paint(performance.now()); });
+    if (!reduced && "IntersectionObserver" in window) new IntersectionObserver((e) => { on = e[0].isIntersecting; if (on) { next = performance.now() + 300; requestAnimationFrame(tick); } }).observe(cv);
+  });
 
   /* cluster layers */
   const layers = $("layers");
