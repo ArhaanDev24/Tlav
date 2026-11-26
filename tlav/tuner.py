@@ -49,7 +49,8 @@ def settings(plan: Plan, hw: Hardware, low_ram: bool = False) -> dict:
 
 
 def server_args(model_path: str, s: dict, host: str = "127.0.0.1", port: int = 8080,
-                draft_path: Optional[str] = None, help_text: Optional[str] = None) -> List[str]:
+                draft_path: Optional[str] = None, help_text: Optional[str] = None,
+                web_path: Optional[str] = None) -> List[str]:
     """llama-server arguments, adapted to the flags the installed llama.cpp version has."""
     h = runtime.help_text("llama-server") if help_text is None else help_text
     known = bool(h)
@@ -73,6 +74,8 @@ def server_args(model_path: str, s: dict, host: str = "127.0.0.1", port: int = 8
             args += ["--load-mode", "mmap+mlock"]
         elif known and "--mlock" in h:
             args.append("--mlock")
+    if web_path and known and "--path" in h:
+        args += ["--path", web_path]   # Tlav's own web chat instead of llama.cpp's built-in one
     if s.get("rpc"):
         args += ["--rpc", ",".join(s["rpc"])]
         if s.get("tensor_split"):

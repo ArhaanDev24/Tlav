@@ -6,8 +6,8 @@ import sys
 from pathlib import Path
 from typing import List, Optional
 
-from . import (__version__, benchmark, catalog, chat, cluster, compress, config, discover, finder, gguf, hardware, hub,
-               planner, runtime, server, service, tuner)
+from . import (__version__, benchmark, catalog, chat, cluster, compress, config, discover, finder, gguf,
+               hardware, hub, planner, runtime, server, service, tuner, web)
 
 
 # ------------------------------------------------------------------ helpers
@@ -415,6 +415,8 @@ def _open_where(url: str, where: str) -> None:
 
 def cmd_open(args):
     """Plain `tlav`: start the set-up model if needed, then ask terminal or web."""
+    if not config.load_state().get("active"):
+        sys.exit("No model set up yet. Type `tlav` (or `tlav setup`) and Tlav picks and installs one.")
     st = server.status()
     url = st["url"] if st["running"] else None
     if not url:
@@ -431,7 +433,7 @@ def _speed_check(plan, path, hw, nodes):
         print("  (speed test skipped: llama-bench did not run)")
         return
     measured, predicted = r["gen_tps"], plan.est_tps
-    cal = benchmark.calibrate(measured, predicted)
+    benchmark.calibrate(measured, predicted)
     print(f"  measured {measured:.1f} tokens/s (estimated {predicted:.1f}); future picks use this PC's real speed")
     plan.est_tps = round(measured, 1)
     return measured
@@ -453,9 +455,15 @@ def _plan_for_file(path: Path, nodes, kv: str, force_split: bool = False) -> Opt
     return plan
 
 
-def _launch(model_path, s, host, port, browser, draft=None, detach=False, quiet=False):
+def _launch(model_path, s, host, port, browser, draft=None, detach=False, quiet=False, info=None):
+    if info is None:
+        active = config.load_state().get("active") or {}
+        same = active.get("path") and Path(active["path"]) == Path(model_path)
+        info = chat.model_info(active) if same else {"model": Path(model_path).stem, "ctx": s.get("ctx"),
+                                                     "reasons": True}
+    webdir = web.prepare(info)
     args = tuner.server_args(str(model_path), s, host=host, port=port,
-                             draft_path=str(draft) if draft else None)
+                             draft_path=str(draft) if draft else None, web_path=str(webdir) if webdir else None)
     print(f"Loading {Path(model_path).name}"
           + (f" across {len(s['rpc']) + 1} computers" if s.get("rpc") else "")
           + " (first load can take a few minutes on old disks/networks)...")
@@ -513,7 +521,7 @@ def cmd_run(args):
 def cmd_status(args):
     st = server.status()
     if not st["running"]:
-        print("Tlav is not running. Start it with `tlav run` (add --detach to run in the background).")
+        print("Tlav is not running. Type `tlav` to start your model and chat.")
     else:
         print(f"Running (pid {st['pid']}) at {st['url']}")
         mem = st.get("memory") or {}
@@ -552,7 +560,7 @@ def _start_active(port: int = 8080, host: str = "127.0.0.1") -> str:
 
 
 def _open_chat(url: str, system=None, info=None, think=None):
-    info = info or chat.model_info(config.load_state().get("active"))
+    info = info or chat.running_info(server.status())
     chat.Chat(url, info, system=system, think=think).loop()
 
 
@@ -573,7 +581,7 @@ def cmd_chat(args):
                                                    "gpu_layers": 0, "kv": planner.DEFAULT_KV, "rpc": [],
                                                    "tensor_split": []}
         _launch(path, s, "127.0.0.1", args.port, False, detach=True, quiet=True)
-        info = {"model": path.stem, "ctx": s["ctx"], "est_tps": plan.est_tps if plan else None}
+        info = chat.file_info(str(path), ctx=s["ctx"], est_tps=plan.est_tps if plan else None)
         return _open_chat(config.load_state()["server_url"], args.system, info, think)
     st = server.status()
     url = st["url"] if st["running"] else None
@@ -619,7 +627,7 @@ def cmd_cluster(args):
         others = [x for x in cluster.saved_workers() if x["endpoint"] not in {w["endpoint"] for w in saved}]
         cluster.save_workers(others + saved)
         if saved:
-            print(f"\nSaved. Now: `tlav recommend --cluster` or `tlav setup --cluster`.")
+            print("\nSaved. Now: `tlav recommend --cluster` or `tlav setup --cluster`.")
     elif args.action == "add":
         if not args.address:
             sys.exit("Usage: tlav cluster add IP[:PORT]")

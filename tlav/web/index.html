@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Tlav</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 4 4'%3E%3Crect width='4' height='4' fill='%2313170f'/%3E%3Crect x='2' width='2' height='2' fill='%23f26b3a'/%3E%3C/svg%3E">
+<style>
+/* Tlav web chat. Served by llama-server from ~/.tlav/web; works fully offline (system fonts only). */
+:root {
+  --bg: #f4f6f0; --surface: #fbfcf9; --ink: #13170f; --muted: #5d6656; --line: #d9dfd2;
+  --soft: #e8ede2; --deep: #24402c; --pixel: #f26b3a; --on-deep: #f3f6ee; --danger: #b3412b;
+  --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11150f; --surface: #171c15; --ink: #e9eee3; --muted: #9aa592; --line: #2a3226;
+    --soft: #1f261c; --deep: #2f5a3b; --pixel: #f47a4c; --on-deep: #f3f6ee; color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body { background: var(--bg); color: var(--ink); font: 16px/1.55 var(--sans); display: flex; flex-direction: column; }
+button, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--pixel); outline-offset: 2px; }
+.mark { width: 14px; height: 14px; flex: none; display: block; }
+.mark .q { transition: transform .2s; }
+@keyframes orbit { 0% { transform: translate(0, 0); } 25% { transform: translate(0, 2px); } 50% { transform: translate(-2px, 2px); } 75% { transform: translate(-2px, 0); } }
+.moving .q { animation: orbit .64s steps(1) infinite; }
+
+header { display: flex; align-items: center; gap: 12px; padding: 12px max(16px, env(safe-area-inset-left)); border-bottom: 1px solid var(--line); background: var(--surface); }
+.brand { display: flex; align-items: center; gap: 8px; font-weight: 650; letter-spacing: -0.02em; font-size: 18px; }
+.model { color: var(--muted); font: 13px var(--mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.tools { margin-left: auto; display: flex; gap: 8px; align-items: center; flex: none; }
+.btn { border: 1px solid var(--line); background: var(--surface); padding: 6px 12px; border-radius: 0; font-size: 14px; min-height: 36px; }
+.btn:hover { border-color: var(--ink); }
+.toggle { display: flex; align-items: center; gap: 6px; font-size: 14px; color: var(--muted); user-select: none; }
+.toggle input { accent-color: var(--pixel); width: 16px; height: 16px; }
+
+main { flex: 1; overflow-y: auto; }
+.log { max-width: 780px; margin: 0 auto; padding: 24px 16px 8px; display: grid; gap: 18px; }
+.empty { text-align: center; color: var(--muted); padding: 12vh 16px 0; }
+.empty .mark { width: 36px; height: 36px; margin: 0 auto 14px; }
+.empty h1 { color: var(--ink); font-size: 26px; letter-spacing: -0.03em; margin: 0 0 6px; }
+.empty p { margin: 0 auto; max-width: 30em; }
+.me { justify-self: end; max-width: 85%; background: var(--ink); color: var(--bg); padding: 10px 14px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.ai { justify-self: start; max-width: 100%; display: grid; gap: 8px; min-width: 0; }
+.head { display: flex; align-items: center; gap: 8px; font-size: 14px; min-height: 20px; }
+.head b { font-weight: 650; }
+.head .verb { color: var(--muted); }
+.head .secs { color: var(--muted); font: 12px var(--mono); }
+.think { font-size: 14px; color: var(--muted); border-left: 2px solid var(--line); padding: 0 0 0 12px; }
+.think summary { cursor: pointer; font-size: 13px; }
+.think div { white-space: pre-wrap; margin-top: 6px; overflow-wrap: anywhere; }
+.text { background: var(--soft); padding: 12px 16px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.text:empty { display: none; }
+.pen { display: inline-block; width: 11px; height: 11px; margin-left: 5px; vertical-align: -1px; }
+.meta { display: flex; gap: 12px; align-items: center; font: 12px var(--mono); color: var(--muted); }
+.meta button { border: 0; background: none; padding: 2px 0; color: var(--muted); font: 12px var(--sans); text-decoration: underline; text-underline-offset: 3px; }
+.meta button:hover { color: var(--ink); }
+.error { color: var(--danger); font-size: 14px; }
+.note { max-width: 780px; margin: 0 auto; padding: 0 16px; font-size: 13px; color: var(--muted); }
+
+form { border-top: 1px solid var(--line); background: var(--surface); padding: 12px max(16px, env(safe-area-inset-left)) max(12px, env(safe-area-inset-bottom)); }
+.compose { max-width: 780px; margin: 0 auto; display: flex; gap: 8px; align-items: flex-end; }
+textarea { flex: 1; resize: none; min-height: 46px; max-height: 40vh; padding: 11px 14px; border: 1px solid var(--line); background: var(--bg); border-radius: 0; line-height: 1.45; }
+textarea:focus { border-color: var(--ink); outline: none; }
+.send { min-height: 46px; padding: 0 18px; border: 0; background: var(--ink); color: var(--bg); font-weight: 600; }
+.send.stop { background: var(--pixel); color: #13170f; }
+.send:disabled { opacity: .5; cursor: default; }
+.hint { max-width: 780px; margin: 6px auto 0; font-size: 12px; color: var(--muted); display: flex; justify-content: space-between; gap: 12px; }
+
+@media (max-width: 560px) {
+  .model { display: none; }
+  .me { max-width: 92%; }
+  .hint span:last-child { display: none; }
+  .btn, .send { min-height: 44px; }
+}
+@media (prefers-reduced-motion: reduce) { .moving .q { animation: none; } }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand"><svg class="mark" viewBox="0 0 4 4" aria-hidden="true"><rect width="4" height="4" fill="var(--ink)"/><rect class="q" x="2" width="2" height="2" fill="var(--pixel)"/></svg>Tlav</div>
+  <div class="model" id="model">local model</div>
+  <div class="tools">
+    <label class="toggle" id="thinkWrap" hidden><input type="checkbox" id="think"> Reasoning</label>
+    <button class="btn" id="newChat" type="button">New chat</button>
+  </div>
+</header>
+<main id="scroller">
+  <div class="log" id="log" aria-live="polite"></div>
+</main>
+<form id="form" autocomplete="off">
+  <div class="compose">
+    <label for="input" class="sr" style="position:absolute;left:-9999px">Message</label>
+    <textarea id="input" rows="1" placeholder="Ask anything"></textarea>
+    <button class="send" id="send" type="submit">Send</button>
+  </div>
+  <div class="hint"><span id="where">Offline · on this computer</span><span>Enter to send · Shift+Enter for a new line</span></div>
+</form>
+<script>
+(() => {
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+  const MARK = '<rect width="4" height="4" fill="var(--ink)"/><rect class="q" x="2" width="2" height="2" fill="var(--pixel)"/>';
+  const svg = (cls) => { const s = document.createElementNS("http://www.w3.org/2000/svg", "svg"); s.setAttribute("viewBox", "0 0 4 4"); s.setAttribute("class", cls); s.setAttribute("aria-hidden", "true"); s.innerHTML = MARK; return s; };
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+
+  // Settings Tlav writes next to this page (tlav.json); sensible defaults if it is missing.
+  let cfg = { model: "", quant: "", ctx: 4096, est_tps: 0, reasons: false, where: "this computer",
+              verbs: ["Defragmenting the C: drive", "Warming up the CRT", "Counting to 640K", "Tlaving"] };
+  const KEY = "tlav.chat.v1";
+  let messages = [], busy = null, think = false, temperature = 0.7;
+
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(messages)); } catch (e) { /* private mode */ } };
+  const load = () => { try { const m = JSON.parse(localStorage.getItem(KEY) || "[]"); return Array.isArray(m) ? m : []; } catch (e) { return []; } };
+
+  // ---------- rendering
+  const log = $("log"), scroller = $("scroller");
+  const atBottom = () => scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 80;
+  const toBottom = (force) => { if (force || atBottom()) scroller.scrollTop = scroller.scrollHeight; };
+
+  const empty = () => {
+    const d = el("div", "empty");
+    d.appendChild(svg("mark"));
+    d.appendChild(el("h1", null, "Your old computer can think."));
+    d.appendChild(el("p", null, `${cfg.model || "Your model"} runs here, offline. Nothing you type leaves ${cfg.where}.`));
+    return d;
+  };
+  const meBubble = (text) => el("div", "me", text);
+  const aiBlock = () => {
+    const wrap = el("div", "ai");
+    const head = el("div", "head");
+    const m = svg("mark");
+    head.append(m, el("b", null, "Tlav"), el("span", "verb"), el("span", "secs"));
+    const text = el("div", "text");
+    const meta = el("div", "meta");
+    wrap.append(head, text, meta);
+    return { wrap, head, mark: m, verb: head.querySelector(".verb"), secs: head.querySelector(".secs"), text, meta };
+  };
+  const copyBtn = (getText) => {
+    const b = el("button", null, "Copy"); b.type = "button";
+    b.addEventListener("click", async () => {
+      try { await navigator.clipboard.writeText(getText()); b.textContent = "Copied"; }
+      catch (e) { b.textContent = "Select and copy"; }
+      setTimeout(() => (b.textContent = "Copy"), 1400);
+    });
+    return b;
+  };
+  const render = () => {
+    log.textContent = "";
+    const shown = messages.filter((m) => m.role !== "system");
+    if (!shown.length) { log.appendChild(empty()); return; }
+    for (const m of shown) {
+      if (m.role === "user") { log.appendChild(meBubble(m.content)); continue; }
+      const a = aiBlock();
+      a.text.textContent = m.content;
+      if (m.stats) a.meta.appendChild(el("span", null, m.stats));
+      a.meta.appendChild(copyBtn(() => m.content));
+      log.appendChild(a.wrap);
+    }
+    toBottom(true);
+  };
+
+  // ---------- <think> tags inside the answer text (some models, older servers)
+  const splitter = () => {
+    let buf = "", inside = false;
+    return (chunk) => {
+      buf += chunk; const out = [];
+      for (;;) {
+        const tag = inside ? "</think>" : "<think>", i = buf.indexOf(tag);
+        if (i >= 0) { if (i) out.push([inside ? "think" : "answer", buf.slice(0, i)]); buf = buf.slice(i + tag.length); inside = !inside; continue; }
+        let keep = 0; for (let k = Math.min(tag.length - 1, buf.length); k > 0; k--) if (tag.startsWith(buf.slice(-k))) { keep = k; break; }
+        const emit = buf.slice(0, buf.length - keep);
+        if (emit) out.push([inside ? "think" : "answer", emit]);
+        buf = buf.slice(emit.length); return out;
+      }
+    };
+  };
+
+  // ---------- keep the conversation inside the model's memory
+  const tokens = (ms) => ms.reduce((n, m) => n + Math.ceil((m.content || "").length / 3.5) + 4, 0);
+  const fit = (ms, reserve) => {
+    const sys = ms[0] && ms[0].role === "system" ? [ms[0]] : [];
+    let rest = ms.slice(sys.length).map(({ role, content }) => ({ role, content }));
+    let dropped = 0;
+    while (rest.length > 1 && tokens(sys.concat(rest)) > Math.max(256, cfg.ctx - reserve)) {
+      const n = rest.length > 2 && rest[0].role === "user" && rest[1].role === "assistant" ? 2 : 1;
+      rest = rest.slice(n); dropped += n;
+    }
+    return { prompt: sys.concat(rest), dropped };
+  };
+
+  // ---------- ask
+  const send = async (text) => {
+    if (!text.trim() || busy) return;
+    if (!messages.some((m) => m.role !== "system")) log.textContent = "";
+    messages.push({ role: "user", content: text });
+    save();
+    log.appendChild(meBubble(text));
+    const a = aiBlock();
+    log.appendChild(a.wrap);
+    toBottom(true);
+
+    // thinking: the square moves and old-computer words rotate until the first word arrives
+    const t0 = performance.now();
+    const verbs = cfg.verbs.slice().sort(() => Math.random() - .5);
+    let vi = 0, phase = "wait";
+    a.mark.classList.add("moving");
+    a.verb.textContent = verbs[0] + "…";
+    const tick = setInterval(() => {
+      const s = Math.floor((performance.now() - t0) / 1000);
+      if (phase !== "write") { a.secs.textContent = (s ? s + "s" : "") + (thoughts ? ` · thinking, ${thoughts} tokens` : ""); vi = Math.floor((performance.now() - t0) / 2800) % verbs.length; a.verb.textContent = verbs[vi] + "…"; }
+    }, 250);
+    const pen = svg("pen moving");
+    let answer = "", reasoning = "", thinkBox = null, thinkText = null, n = 0, timings = null, first = 0, thoughts = 0;
+    const { prompt, dropped } = fit(messages, Math.min(2048, Math.floor(cfg.ctx / 2)));
+    if (dropped) a.meta.appendChild(el("span", null, `oldest ${dropped} messages left out to make room`));
+
+    let writeAt = 0;
+    const startWriting = () => {
+      if (phase === "write") return;
+      phase = "write"; writeAt = performance.now();
+      a.mark.classList.remove("moving");
+      a.verb.textContent = ""; a.secs.textContent = "";
+      a.text.textContent = ""; a.text.appendChild(document.createTextNode("")); a.text.appendChild(pen);
+    };
+    const showThinking = (chunk) => {
+      reasoning += chunk; thoughts++;
+      if (!thinkBox) {   // collapsed: the status line shows progress, the text is one click away
+        thinkBox = el("details", "think");
+        thinkBox.appendChild(el("summary", null, "Thinking…"));
+        thinkText = el("div"); thinkBox.appendChild(thinkText);
+        a.wrap.insertBefore(thinkBox, a.text);
+      }
+      thinkText.textContent = reasoning;
+    };
+    const feed = splitter();
+    const ctrl = new AbortController();
+    busy = ctrl; setBusy(true);
+    let error = "";
+    try {
+      const room = Math.max(256, Math.min(2048, Math.floor(cfg.ctx / 2)));
+      const body = { messages: prompt, stream: true, temperature, max_tokens: think && cfg.reasons ? Math.max(room, Math.floor(cfg.ctx / 2)) : room };
+      if (cfg.reasons) body.chat_template_kwargs = { enable_thinking: think };
+      const res = await fetch("v1/chat/completions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal: ctrl.signal });
+      if (!res.ok || !res.body) throw new Error(`the model answered ${res.status}`);
+      const reader = res.body.getReader(), dec = new TextDecoder();
+      let rest = "";
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        rest += dec.decode(value, { stream: true });
+        const lines = rest.split("\n"); rest = lines.pop();
+        for (const line of lines) {
+          if (!line.startsWith("data:")) continue;
+          const data = line.slice(5).trim();
+          if (data === "[DONE]") continue;
+          let j; try { j = JSON.parse(data); } catch (e) { continue; }
+          if (j.timings) timings = j.timings;
+          const d = j.choices && j.choices[0] && j.choices[0].delta;
+          if (!d) continue;
+          const parts = [];
+          if (d.reasoning_content) parts.push(["think", d.reasoning_content]);
+          if (d.content) parts.push(...feed(d.content));
+          for (const [kind, chunk] of parts) {
+            if (!first) first = performance.now();
+            if (kind === "think") { showThinking(chunk); continue; }
+            if (!answer && !chunk.trim()) continue;
+            startWriting();
+            answer += chunk; n++;
+            a.text.firstChild.textContent = answer;
+          }
+          toBottom();
+        }
+      }
+    } catch (e) {
+      if (e.name !== "AbortError") error = "The model stopped answering (" + (e.message || e) + "). Is Tlav still running? Try `tlav status`.";
+    }
+    clearInterval(tick);
+    busy = null; setBusy(false);
+    pen.remove(); a.mark.classList.remove("moving"); a.verb.textContent = ""; a.secs.textContent = "";
+    if (thinkBox) { thinkBox.firstChild.textContent = `Thought for ${Math.max(1, Math.round(((writeAt || performance.now()) - t0) / 1000))}s`; }
+    answer = answer.trim();
+    a.text.textContent = answer;
+    if (error) a.meta.appendChild(el("span", "error", error));
+    if (answer) {
+      const secs = (performance.now() - t0) / 1000;
+      const tok = timings ? timings.predicted_n : n;
+      const tps = timings && timings.predicted_per_second ? timings.predicted_per_second : (first ? n / Math.max(.01, (performance.now() - first) / 1000) : 0);
+      const stats = `${tok} tokens · ${tps.toFixed(1)} tokens/s · ${secs.toFixed(1)}s${ctrl.signal.aborted ? " · stopped" : ""}`;
+      a.meta.prepend(el("span", null, stats));
+      a.meta.appendChild(copyBtn(() => answer));
+      messages.push({ role: "assistant", content: answer, stats });
+    } else {
+      messages.pop();   // nothing came back: keep the question out of the history
+      if (!error) a.meta.appendChild(el("span", null, reasoning && !ctrl.signal.aborted
+        ? "It used all its room thinking and never got to the answer. Turn Reasoning off for a direct answer."
+        : "No answer."));
+    }
+    save();
+    toBottom();
+  };
+
+  // ---------- controls
+  const input = $("input"), btn = $("send");
+  const setBusy = (on) => { btn.textContent = on ? "Stop" : "Send"; btn.classList.toggle("stop", on); btn.type = on ? "button" : "submit"; };
+  const grow = () => { input.style.height = "auto"; input.style.height = Math.min(input.scrollHeight + 2, innerHeight * .4) + "px"; };
+  input.addEventListener("input", grow);
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); $("form").requestSubmit(); }
+  });
+  $("form").addEventListener("submit", (e) => { e.preventDefault(); if (busy) return; const t = input.value; input.value = ""; grow(); send(t); });
+  btn.addEventListener("click", () => { if (busy) busy.abort(); });
+  $("newChat").addEventListener("click", () => { if (busy) busy.abort(); messages = messages.filter((m) => m.role === "system"); save(); render(); input.focus(); });
+  $("think").addEventListener("change", (e) => { think = e.target.checked; try { localStorage.setItem("tlav.think", think ? "1" : "0"); } catch (x) {} });
+
+  // ---------- start
+  const start = async () => {
+    try { const r = await fetch("tlav.json", { cache: "no-store" }); if (r.ok) cfg = Object.assign(cfg, await r.json()); } catch (e) { /* plain llama-server */ }
+    if (!cfg.model) {
+      try { const p = await (await fetch("props")).json(); const path = p.model_path || ""; cfg.model = path.split(/[\\/]/).pop().replace(/\.gguf$/, ""); cfg.ctx = (p.default_generation_settings || {}).n_ctx || cfg.ctx; } catch (e) {}
+    }
+    $("model").textContent = [cfg.model, cfg.quant].filter(Boolean).join(" · ") || "local model";
+    $("where").textContent = `Offline · on ${cfg.where}`;
+    if (cfg.reasons) {
+      $("thinkWrap").hidden = false;
+      let saved = null; try { saved = localStorage.getItem("tlav.think"); } catch (e) {}
+      think = saved != null ? saved === "1" : !!cfg.think_default;   // slow PC or tiny model: answer first
+      $("think").checked = think;
+    }
+    messages = load();
+    render();
+    input.focus();
+  };
+  start();
+})();
+</script>
+</body>
+</html>
