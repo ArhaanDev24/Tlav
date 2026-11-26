@@ -54,10 +54,14 @@ CHARS_PER_TOKEN = 3.5
 
 # What Tlav says while the model gets going: a nod to the old machines it runs on.
 VERBS = [
-    "Booting up", "Warming the vacuum tubes", "Spinning up the hard drive", "Defragmenting thoughts",
-    "Dialing up", "Rewinding the tape", "Loading from floppy", "Paging in memory",
-    "Blowing on the cartridge", "Shuffling punch cards", "Consulting the BIOS", "Waking the old CPU",
-    "Reticulating bits", "Tlaving",
+    "Defragmenting the C: drive", "Blowing dust out of the fan", "Waiting for the dial-up handshake",
+    "Rewinding the cassette with a pencil", "Inserting disk 2 of 7", "Warming up the CRT",
+    "Pressing any key", "Turning it off and on again", "Blowing on the cartridge",
+    "Degaussing the monitor", "Spinning up the 5,400 RPM drive", "Feeding the punch cards",
+    "Consulting the BIOS", "Counting to 640K", "Checking the turbo button",
+    "Calibrating the ball mouse", "Untangling the printer cable", "Paging to swap, sorry",
+    "Waiting for the screensaver to finish", "Adjusting the rabbit ears", "Rebooting the hamster wheel",
+    "Asking the paperclip for help", "Compiling, go make some tea", "Tlaving",
 ]
 
 
@@ -533,7 +537,7 @@ class Chat:
             self.ask(arg)
         self.autosave()
         if not self.stopped:
-            print(dim("  Bye. The model keeps running in the background; `tlav stop` frees its memory."))
+            print(dim("  Bye. The model keeps running in the background: `tlav` brings you back, `tlav stop` frees its memory."))
 
 
 # ------------------------------------------------------------------ small system helpers

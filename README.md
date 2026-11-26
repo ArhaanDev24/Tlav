@@ -22,7 +22,7 @@ One command. Tlav:
 6. **Measures it**: one quick speed test on the installed model; if your PC is slower than expected, Tlav offers a faster pick.
 7. **Opens the Tlav chat** in your terminal. A web chat and an OpenAI-compatible API run too, and it can start at boot as an always-on AI box.
 
-Next time, just type `tlav`: it starts your model and opens the chat.
+Next time, just type `tlav`: it starts your model and asks where you want to chat, **here in the terminal or in your web browser**. It asks every time, so you can switch whenever you like (`tlav chat` always opens the terminal).
 
 ---
 
@@ -71,7 +71,7 @@ Typical picks for a 2013 iMac (quad-core Haswell, DDR3-1600):
 
 ## The Tlav chat
 
-`tlav` (or `tlav chat`) opens a chat in your terminal and starts your model if it isn't running. Answers stream as they are written, with the speed shown after each one. Conversations are kept on your disk only.
+`tlav` (or `tlav chat`) opens a chat in your terminal and starts your model if it isn't running. While an old PC gets going, Tlav shows what it's "doing" (*Defragmenting the C: drive…*, *Rewinding the cassette with a pencil…*, *Counting to 640K…*), then the Tlav square follows the words as they are written, with the speed shown after each answer. Conversations are kept on your disk only.
 
 ```
   ■ Tlav  Qwen3.5 9B  Q4_K_M
@@ -193,7 +193,7 @@ A bigger model compressed to Q4_K_M almost always beats a smaller model kept at 
 
 | Command | What it does |
 |---|---|
-| `tlav` | Set up on first run, then open the chat |
+| `tlav` | Set up on first run; afterwards start your model and ask: terminal or web chat |
 | `tlav setup` | Everything: detect → benchmark → pick → download/compress → speed test → chat (`--web` for the browser) |
 | `tlav setup --cluster` / `--hf REPO` / `--max-quality` | Use workers / any Hugging Face model / near-lossless only |
 | `tlav doctor` | Hardware report, RAM budget, cluster support |

@@ -377,15 +377,50 @@ def cmd_setup(args):
     config.save_state(active={"path": str(path), "draft_path": str(draft) if draft else None,
                               "plan": plan.to_dict(), "settings": s})
     if args.no_run:
-        print("\nDone. Chat any time with `tlav chat` (or just `tlav`)"
+        print("\nDone. Type `tlav` any time to chat, in the terminal or your browser"
               + (" - keep the workers running." if plan.is_cluster else "."))
         return
     print("\nStep 5/5  Starting your local AI")
-    if args.web or args.detach:
-        _launch(path, s, args.host, args.port, not args.no_browser, draft=draft, detach=args.detach)
+    if args.detach:
+        _launch(path, s, args.host, args.port, not args.no_browser, draft=draft, detach=True)
         return
     _launch(path, s, args.host, args.port, False, draft=draft, detach=True, quiet=True)
-    _open_chat(config.load_state()["server_url"])
+    print("  Ready.")
+    _open_where(config.load_state()["server_url"], "web" if args.web else _ask_where())
+
+
+def _ask_where(default: str = "terminal") -> str:
+    """Terminal or web browser? Asked after setup and every time `tlav` opens."""
+    if not sys.stdin.isatty():
+        return default
+    print("\n  Where do you want to chat?")
+    print("    1  Here in the terminal")
+    print("    2  In your web browser")
+    try:
+        ans = input("  Choose 1 or 2 [1]: ").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        print()
+        sys.exit(0)
+    return "web" if ans in ("2", "w", "web", "b", "browser") else "terminal"
+
+
+def _open_where(url: str, where: str) -> None:
+    if where == "web":
+        server.open_browser(url)
+        print(f"\n  Opened {url} in your browser.")
+        print("  Tlav keeps running in the background: `tlav` brings you back, `tlav stop` frees its memory.")
+        return
+    _open_chat(url)
+
+
+def cmd_open(args):
+    """Plain `tlav`: start the set-up model if needed, then ask terminal or web."""
+    st = server.status()
+    url = st["url"] if st["running"] else None
+    if not url:
+        print(chat.dim("  Starting your model (first start can take a minute on old disks)..."))
+        url = _start_active(args.port)
+    _open_where(url, args.where or _ask_where())
 
 
 def _speed_check(plan, path, hw, nodes):
@@ -756,7 +791,7 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--skip-bench", action="store_true")
     s.add_argument("--yes", "-y", action="store_true")
     s.add_argument("--no-run", action="store_true")
-    s.add_argument("--web", action="store_true", help="open the browser chat instead of the terminal chat")
+    s.add_argument("--web", action="store_true", help="open the browser chat without asking")
     s.add_argument("--offline", action="store_true", help="pick from specs only, without checking file sizes online")
     s.set_defaults(func=cmd_setup)
 
@@ -792,6 +827,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     s = sub.add_parser("stop", help="stop a background server")
     s.set_defaults(func=cmd_stop)
+
+    s = sub.add_parser("open", help="start your model and choose terminal or web chat (what plain `tlav` does)")
+    s.add_argument("--where", choices=["terminal", "web"], help="skip the question")
+    s.add_argument("--port", type=int, default=8080)
+    s.set_defaults(func=cmd_open)
 
     s = sub.add_parser("chat", help="the Tlav chat terminal (starts your model if needed)")
     s.add_argument("--url", help="chat with a model server somewhere else")
@@ -834,7 +874,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
     if not argv:  # just `tlav`: chat if a model is set up, otherwise set one up
-        argv = ["chat"] if config.load_state().get("active") else ["setup"]
+        argv = ["open"] if config.load_state().get("active") else ["setup"]
     args = build_parser().parse_args(argv)
     try:
         args.func(args)
