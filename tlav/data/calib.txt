@@ -1,0 +1,62 @@
+Customer: Hi, my order arrived yesterday but one of the mugs was cracked. What should I do?
+Support: I'm sorry to hear that. Please send a photo of the damaged mug and your order number, and we will ship a replacement today at no cost.
+Customer: Thanks! The order number is 48213.
+Support: Got it. A new mug is on its way and should arrive within three business days.
+
+def fibonacci(n):
+    """Return the first n Fibonacci numbers."""
+    seq = [0, 1]
+    while len(seq) < n:
+        seq.append(seq[-1] + seq[-2])
+    return seq[:n]
+
+for i, value in enumerate(fibonacci(10)):
+    print(f"F({i}) = {value}")
+
+Shopping list for the week: oats, bananas, two litres of milk, brown rice, lentils, spinach, tomatoes, onions, garlic, olive oil, eggs, cheddar, apples and coffee beans.
+
+The water cycle describes how water moves through the environment. Heat from the sun causes water in oceans, lakes and rivers to evaporate. The vapour rises, cools and condenses into clouds. When droplets in the clouds grow heavy enough they fall as rain, snow or hail. Some of this water flows over the ground into rivers, some soaks into the soil to become groundwater, and plants return a portion to the air through transpiration.
+
+Question: If a train leaves at 9:40 and the journey takes 2 hours and 35 minutes, when does it arrive?
+Answer: Adding 2 hours gives 11:40, and adding 35 more minutes gives 12:15. The train arrives at 12:15.
+
+Dear Ms. Patel,
+Thank you for inviting me to speak at the community library next month. I would be glad to give a short talk about repairing old electronics, followed by a hands-on session. Please let me know how much time is available and whether a projector can be provided.
+Kind regards,
+Daniel
+
+SELECT customer_id, COUNT(*) AS orders, SUM(total) AS revenue
+FROM orders
+WHERE created_at >= '2026-01-01'
+GROUP BY customer_id
+HAVING COUNT(*) > 3
+ORDER BY revenue DESC
+LIMIT 20;
+
+Photosynthesis takes place mainly in the leaves of plants. Chlorophyll absorbs light, and the plant uses that energy to turn carbon dioxide and water into glucose and oxygen. The glucose provides energy and building material for growth, while the oxygen is released into the air.
+
+Tips for a job interview: research the company beforehand, prepare two or three questions of your own, arrive ten minutes early, listen carefully before answering, give concrete examples of past work, and send a short thank-you note afterwards.
+
+const express = require("express");
+const app = express();
+app.get("/health", (req, res) => res.json({ status: "ok" }));
+app.listen(3000, () => console.log("listening on port 3000"));
+
+In 1969 the Apollo 11 mission landed the first humans on the Moon. Neil Armstrong and Buzz Aldrin spent about two and a half hours walking on the surface, collecting rock samples and setting up experiments, while Michael Collins orbited above in the command module.
+
+Recipe: To make a simple tomato soup, soften a chopped onion and two cloves of garlic in olive oil, add a kilogram of ripe tomatoes, a pinch of salt and a cup of stock, simmer for twenty minutes, then blend until smooth and finish with fresh basil.
+
+A haiku about autumn:
+Maple leaves drifting,
+the quiet street turns to gold,
+cold tea on the sill.
+
+The difference between weather and climate is a matter of time. Weather describes conditions over hours or days, such as a rainy afternoon. Climate describes the average pattern over decades, such as a region having mild, wet winters and dry summers.
+
+User: Can you explain what RAM does in a computer?
+Assistant: RAM is the computer's short-term working memory. Programs and the data they are using right now are kept there because it is much faster to read than a hard drive. When RAM fills up, the system has to move data to the slower disk, which makes everything feel sluggish.
+
+Le petit déjeuner est servi de sept heures à dix heures. Merci de laisser votre clé à la réception avant de partir.
+El museo abre todos los días excepto los lunes, y la entrada es gratuita el primer domingo de cada mes.
+
+Steps to change a bicycle tyre: release the brake, remove the wheel, push one side of the tyre off the rim with tyre levers, pull out the old tube, check the inside of the tyre for sharp objects, insert a slightly inflated new tube, push the tyre back onto the rim, inflate to the pressure printed on the sidewall and refit the wheel.

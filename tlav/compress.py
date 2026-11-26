@@ -16,18 +16,43 @@ from typing import Optional
 
 from . import catalog, config, hub, runtime
 
-EVAL_TEXT = Path(__file__).parent / "data" / "eval.txt"
+EVAL_TEXT = Path(__file__).parent / "data" / "eval.txt"      # used only to *measure* quality
+CALIB_TEXT = Path(__file__).parent / "data" / "calib.txt"    # used only to *tune* compression
 
 
-def quantize(src: Path, quant: str, threads: int, out: Optional[Path] = None) -> Path:
+def importance_matrix(src: Path, threads: int, text: Path = CALIB_TEXT) -> Optional[Path]:
+    """Measure which weights matter most (llama-imatrix) so compression protects them.
+
+    Calibration uses a different text from the quality test, so the quality
+    check stays honest.
+    """
+    exe = runtime.find("llama-imatrix")
+    if not exe:
+        return None
+    out = src.parent / (src.stem + ".imatrix.gguf")
+    if out.exists():
+        return out
+    log = config.home() / "compress.log"
+    print(f"Measuring weight importance on calibration text (details in {log}) ...")
+    cmd = [exe, "-m", str(src), "-f", str(text), "-o", str(out), "-c", "256", "-t", str(threads),
+           "-b", "256"]
+    with open(log, "a") as f:
+        res = subprocess.run(cmd, stdout=f, stderr=subprocess.STDOUT)
+    return out if res.returncode == 0 and out.exists() else None
+
+
+def quantize(src: Path, quant: str, threads: int, out: Optional[Path] = None,
+             imatrix: Optional[Path] = None) -> Path:
     q = runtime.require("llama-quantize")
     base = re.sub(r"[-.](f16|bf16|f32|q8_0)$", "", src.stem, flags=re.I)
-    out = out or src.parent / f"{base}-{quant}.gguf"
+    out = out or src.parent / f"{base}-{quant}{'-imat' if imatrix else ''}.gguf"
     if out.exists():
         return out
     cmd = [q]
     if not re.search(r"[-.](f16|bf16|f32)$", src.stem, re.I):
         cmd.append("--allow-requantize")  # source already quantized (e.g. Q8_0)
+    if imatrix:
+        cmd += ["--imatrix", str(imatrix)]
     cmd += [str(src), str(out), quant, str(threads)]
     log = config.home() / "compress.log"
     print(f"Compressing {src.name} -> {out.name} (details in {log}) ...")
@@ -46,10 +71,14 @@ def parse_perplexity(output: str) -> Optional[float]:
     return float(vals[-1]) if vals else None
 
 
-def perplexity(model: Path, threads: int, ctx: int = 256, chunks: int = 4) -> Optional[float]:
+def perplexity(model: Path, threads: int, ctx: int = 256, chunks: int = 4,
+               kv: str = "f16") -> Optional[float]:
     exe = runtime.require("llama-perplexity")
     cmd = [exe, "-m", str(model), "-f", str(EVAL_TEXT), "-c", str(ctx), "--chunks", str(chunks),
            "-t", str(threads), "-b", str(ctx)]
+    if kv != "f16":
+        h = runtime.help_text("llama-perplexity")
+        cmd += (["-fa", "on"] if (not h or "on|off" in h) else ["-fa"]) + ["-ctk", kv, "-ctv", kv]
     res = subprocess.run(cmd, capture_output=True, text=True)
     return parse_perplexity(res.stdout + res.stderr)
 
@@ -59,32 +88,56 @@ def quality_delta(ref_ppl: float, new_ppl: float) -> float:
     return 100.0 * (new_ppl - ref_ppl) / ref_ppl
 
 
+def kv_check(model: Path, threads: int, kv: str = "q8_0", tolerance_pct: float = 0.5) -> dict:
+    """Does a compressed context cache (KV) change quality for this model? Measured, not assumed."""
+    ref = perplexity(model, threads)
+    new = perplexity(model, threads, kv=kv)
+    if ref is None or new is None:
+        return {"kv": "f16", "ok": False, "reason": "could not measure"}
+    delta = quality_delta(ref, new)
+    ok = delta <= tolerance_pct
+    return {"kv": kv if ok else "f16", "ok": ok, "ref_ppl": ref, "ppl": new, "delta_pct": round(delta, 3)}
+
+
 def compress(source: Path, quant: str, threads: int, verify: bool = True,
-             tolerance_pct: float = 3.0) -> dict:
+             tolerance_pct: float = 3.0, use_imatrix: bool = True) -> dict:
     """Quantize `source` to `quant`; if verification fails, step up to the next larger quant."""
     order = [q.name for q in catalog.QUANTS if q.name != "F16"]
     start = order.index(quant)
     ref = perplexity(source, threads) if verify else None
     if verify and ref is None:
         print("Warning: could not measure reference perplexity; skipping quality check.")
+    imat = importance_matrix(source, threads) if use_imatrix else None
     result = {}
     for name in reversed(order[: start + 1]):  # target first, then progressively larger
-        out = quantize(source, name, threads)
-        result = {"path": str(out), "quant": name, "size_gb": round(out.stat().st_size / 1024 ** 3, 2),
-                  "ref_ppl": ref}
+        variants = [quantize(source, name, threads)]
+        if imat and name != "Q8_0":
+            variants.append(quantize(source, name, threads, imatrix=imat))
         if not verify or ref is None:
-            return result
-        ppl = perplexity(out, threads)
-        result["ppl"] = ppl
+            out = variants[-1]
+            return {"path": str(out), "quant": name, "size_gb": round(out.stat().st_size / 1024 ** 3, 2),
+                    "ref_ppl": ref, "imatrix": out != variants[0]}
+        # Measure every variant and keep the one that really is closest to the original.
+        scored = [(perplexity(v, threads), v) for v in variants]
+        scored = [(s, v) for s, v in scored if s is not None] or [(None, variants[-1])]
+        ppl, out = min(scored, key=lambda x: x[0] if x[0] is not None else float("inf"))
+        for _, v in scored:
+            if v != out:
+                v.unlink(missing_ok=True)
+        result = {"path": str(out), "quant": name, "size_gb": round(out.stat().st_size / 1024 ** 3, 2),
+                  "ref_ppl": ref, "ppl": ppl, "imatrix": out != variants[0]}
         if ppl is None:
             return result
         delta = quality_delta(ref, ppl)
         result["delta_pct"] = round(delta, 2)
-        print(f"  {name}: perplexity {ppl:.3f} vs original {ref:.3f} ({delta:+.2f}%)")
+        how = "importance-matrix" if result["imatrix"] else "standard"
+        print(f"  {name} ({how}): perplexity {ppl:.3f} vs original {ref:.3f} ({delta:+.2f}%)")
         if delta <= tolerance_pct:
             result["verified"] = True
             return result
         print(f"  {name} loses more than {tolerance_pct}% quality; trying a larger level.")
+        if name != order[0]:  # keep the last attempt so a result always exists
+            out.unlink(missing_ok=True)  # don't leave rejected files behind
     result["verified"] = False
     return result
 

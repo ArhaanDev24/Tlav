@@ -9,6 +9,7 @@ longer support. Linux/Windows can use prebuilt releases instead.
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -21,7 +22,10 @@ from typing import Dict, List, Optional
 from . import config
 from .hardware import Hardware
 
-TOOLS = ["llama-server", "llama-cli", "llama-quantize", "llama-perplexity", "llama-bench"]
+TOOLS = ["llama-server", "llama-cli", "llama-quantize", "llama-perplexity", "llama-bench", "llama-imatrix",
+         "rpc-server"]
+# Upstream renamed some binaries over time; accept every known name.
+ALIASES = {"rpc-server": ["rpc-server", "ggml-rpc-server"]}
 REPO = "ggml-org/llama.cpp"
 EXE = ".exe" if os.name == "nt" else ""
 
@@ -42,11 +46,17 @@ def _bin_dirs() -> List[Path]:
 
 
 def find(tool: str) -> Optional[str]:
+    names = ALIASES.get(tool, [tool])
     for d in _bin_dirs():
-        p = d / (tool + EXE)
-        if p.exists():
-            return str(p)
-    return shutil.which(tool)
+        for n in names:
+            p = d / (n + EXE)
+            if p.exists():
+                return str(p)
+    for n in names:
+        w = shutil.which(n)
+        if w:
+            return w
+    return None
 
 
 def require(tool: str) -> str:
@@ -56,13 +66,32 @@ def require(tool: str) -> str:
     return p
 
 
+_HELP_CACHE: Dict[str, str] = {}
+
+
+def help_text(tool: str) -> str:
+    """`tool --help` output (cached), used to adapt to the installed llama.cpp version."""
+    if tool not in _HELP_CACHE:
+        exe = find(tool)
+        text = ""
+        if exe:
+            try:
+                res = subprocess.run([exe, "--help"], capture_output=True, text=True, timeout=30)
+                text = res.stdout + res.stderr
+            except (OSError, subprocess.SubprocessError):
+                pass
+        _HELP_CACHE[tool] = text
+    return _HELP_CACHE[tool]
+
+
 def status() -> Dict[str, Optional[str]]:
     return {t: find(t) for t in TOOLS}
 
 
 def cmake_flags(hw: Hardware) -> List[str]:
     flags = ["-DCMAKE_BUILD_TYPE=Release", "-DLLAMA_CURL=OFF", "-DBUILD_SHARED_LIBS=OFF",
-             "-DLLAMA_BUILD_TESTS=OFF", "-DLLAMA_BUILD_EXAMPLES=OFF", "-DGGML_NATIVE=ON"]
+             "-DLLAMA_BUILD_TESTS=OFF", "-DLLAMA_BUILD_EXAMPLES=OFF", "-DGGML_NATIVE=ON",
+             "-DGGML_RPC=ON"]  # RPC lets several machines share one model (tlav worker / cluster)
     if hw.os_name == "macOS":
         flags.append("-DGGML_METAL=" + ("ON" if hw.arch == "arm64" else "OFF"))
         if hw.arch != "arm64":
@@ -101,6 +130,17 @@ def _fetch_source(dest: Path) -> Path:
     return src
 
 
+def _target_name(src: Path, tool: str) -> str:
+    """CMake target for a tool in this llama.cpp checkout (handles upstream renames)."""
+    if tool == "rpc-server":
+        cm = src / "tools" / "rpc" / "CMakeLists.txt"
+        if cm.exists():
+            m = re.search(r"set\(TARGET\s+([\w-]+)\)", cm.read_text())
+            if m:
+                return m.group(1)
+    return tool
+
+
 def build_from_source(hw: Hardware, jobs: Optional[int] = None) -> Path:
     rt = config.runtime_dir()
     src = _fetch_source(rt)
@@ -109,11 +149,12 @@ def build_from_source(hw: Hardware, jobs: Optional[int] = None) -> Path:
     print("Configuring llama.cpp with:", " ".join(cmake_flags(hw)))
     subprocess.check_call([cmake, "-S", str(src), "-B", str(build)] + cmake_flags(hw))
     jobs = jobs or max(1, hw.logical_cores)
+    targets = [_target_name(src, t) for t in TOOLS]
     subprocess.check_call([cmake, "--build", str(build), "--config", "Release", "-j", str(jobs),
-                           "--target"] + TOOLS)
+                           "--target"] + targets)
     out = rt / "bin"
     out.mkdir(exist_ok=True)
-    for t in TOOLS:
+    for t in targets:
         for cand in (build / "bin" / (t + EXE), build / "bin" / "Release" / (t + EXE)):
             if cand.exists():
                 shutil.copy2(cand, out / cand.name)

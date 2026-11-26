@@ -1,6 +1,9 @@
 """Model catalog plus quantization (compression) levels."""
 
 import json
+import math
+import os
+import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -54,6 +57,7 @@ class Model:
     quality: Dict[str, int] = field(default_factory=dict)
     tags: List[str] = field(default_factory=list)
     active_params_b: Optional[float] = None
+    draft: Optional[str] = None   # small same-tokenizer model for speculative decoding
 
     @property
     def is_moe(self) -> bool:
@@ -67,20 +71,55 @@ class Model:
         p = self.active_params_b if self.is_moe else self.params_b
         return p * 1e9 * quant.bpw / 8 / 1024 ** 3
 
-    def kv_cache_gb(self, ctx: int, bytes_per_elem: int = 2) -> float:
+    def kv_cache_gb(self, ctx: int, bytes_per_elem: float = 2) -> float:
+        """K+V cache size. 2 bytes = f16, ~1.06 bytes = q8_0 (Tlav's default)."""
         return 2 * self.layers * self.kv_heads * self.head_dim * ctx * bytes_per_elem / 1024 ** 3
 
     def score(self, task: str) -> int:
         return self.quality.get(task, self.quality.get("chat", 50))
 
 
+# Bytes per KV-cache element: f16 vs q8_0 (34 bytes per 32 values).
+KV_BYTES = {"f16": 2.0, "q8_0": 34 / 32}
+
+CATALOG_URL = os.environ.get(
+    "TLAV_CATALOG_URL", "https://raw.githubusercontent.com/ArhaanDev24/Tlavv/main/tlav/data/catalog.json")
+
+
+def estimate_quality(params_b: float, moe_total_b: Optional[float] = None) -> int:
+    """Rough capability score for models outside the curated catalog (log-scale in size).
+
+    For mixture-of-experts we use the geometric mean of total and active size,
+    a common rule of thumb for their 'dense-equivalent' strength.
+    """
+    eff = math.sqrt(params_b * moe_total_b) if moe_total_b else params_b
+    return int(max(30, min(85, 45 + 7.2 * math.log2(max(eff, 0.1) / 0.5))))
+
+
+def quant_from_file(size_bytes: int, params_b: float, name: str = "file") -> Quant:
+    """Describe an existing GGUF file as a Quant using its real bits/weight."""
+    bpw = size_bytes * 8 / (params_b * 1e9) if params_b else 4.85
+    known = QUANT_BY_NAME.get(name.upper())
+    retention = known.retention if known else next(
+        (q.retention for q in reversed(QUANTS) if q.bpw >= bpw - 0.3), 1.0)
+    return Quant(name.upper(), round(bpw, 2), retention, known.note if known else "from file")
+
+
 def _catalog_path() -> Path:
+    try:
+        from . import config
+        override = config.home() / "catalog.json"
+        if override.exists():
+            return override
+    except OSError:
+        pass
     return Path(__file__).parent / "data" / "catalog.json"
 
 
 def load() -> List[Model]:
     data = json.loads(_catalog_path().read_text())
-    return [Model(**m) for m in data["models"]]
+    fields = set(Model.__dataclass_fields__)
+    return [Model(**{k: v for k, v in m.items() if k in fields}) for m in data["models"]]
 
 
 def get(model_id: str) -> Model:
@@ -88,3 +127,18 @@ def get(model_id: str) -> Model:
         if m.id == model_id:
             return m
     raise KeyError(f"Unknown model '{model_id}'. Run `tlav models` to see the catalog.")
+
+
+def update(url: str = CATALOG_URL) -> int:
+    """Download the latest catalog into ~/.tlav/catalog.json. Returns the model count."""
+    from . import config
+    req = urllib.request.Request(url, headers={"User-Agent": "tlav"})
+    tok = os.environ.get("GITHUB_TOKEN")
+    if tok and "githubusercontent" in url:
+        req.add_header("Authorization", f"token {tok}")
+    with urllib.request.urlopen(req, timeout=30) as r:
+        data = json.loads(r.read())
+    if not isinstance(data.get("models"), list) or not data["models"]:
+        raise ValueError("downloaded catalog is empty or malformed")
+    (config.home() / "catalog.json").write_text(json.dumps(data, indent=1))
+    return len(data["models"])

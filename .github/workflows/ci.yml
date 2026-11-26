@@ -3,6 +3,7 @@ on: [push, pull_request]
 jobs:
   test:
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
         python: ["3.8", "3.12"]
@@ -19,3 +20,45 @@ jobs:
       - run: pytest -q
       - run: tlav doctor
       - run: tlav recommend --ram 16
+      - run: tlav recommend --ram 16 --ram 16
+
+  end-to-end:
+    # Builds llama.cpp (with cluster support) the way Tlav does for users, then
+    # compresses, verifies, serves and splits a tiny model across two workers.
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      TLAV_HOME: ${{ github.workspace }}/.tlav
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e .
+      - run: tlav install-runtime --source
+      - run: tlav doctor
+      - name: Compress with quality check
+        run: |
+          python - <<'PY'
+          from tlav import hub
+          hub.download("bartowski/Qwen2.5-0.5B-Instruct-GGUF", "Qwen2.5-0.5B-Instruct-f16.gguf", quiet=True)
+          PY
+          tlav compress --file "$TLAV_HOME/models/Qwen2.5-0.5B-Instruct-f16.gguf" --to Q4_K_M --kv-check
+      - name: Serve on one PC, then across a 3-machine cluster, and compare answers
+        run: |
+          M="$TLAV_HOME/models/Qwen2.5-0.5B-Instruct-Q4_K_M.gguf"
+          ask() { curl -s "http://127.0.0.1:$1/v1/chat/completions" -H "Content-Type: application/json" \
+            -d '{"messages":[{"role":"user","content":"Name three planets."}],"max_tokens":40,"temperature":0}' \
+            | python -c "import json,sys; print(json.load(sys.stdin)['choices'][0]['message']['content'])"; }
+          tlav run --model "$M" --no-browser --detach --port 8101
+          ask 8101 > single.txt && tlav stop
+          nohup tlav worker --host 127.0.0.1 --port 50061 --discovery-port 50071 > w1.log 2>&1 &
+          nohup tlav worker --host 127.0.0.1 --port 50062 --discovery-port 50072 > w2.log 2>&1 &
+          sleep 15
+          tlav cluster add 127.0.0.1:50061 --discovery-port 50071
+          tlav cluster add 127.0.0.1:50062 --discovery-port 50072
+          tlav run --model "$M" --cluster --force-split --no-browser --detach --port 8102
+          ask 8102 > cluster.txt && tlav stop
+          cat single.txt cluster.txt
+          diff single.txt cluster.txt
+          pkill -f "tlav worker" || true

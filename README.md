@@ -1,26 +1,27 @@
 # Tlav
 
-**Turn old PCs and laptops into local AI workstations.**
+**Turn old PCs and laptops into local AI workstations, alone or together.**
 
-That 2013 iMac in the corner, the ThinkPad in a drawer, the tower under the desk can all run a capable AI assistant, fully offline. Tlav does the hard parts for you:
-
-1. **Detects** your hardware: RAM, CPU cores, AVX/AVX2/AVX-512 support, GPU, disk.
-2. **Benchmarks** memory bandwidth, which sets how fast a model can talk on a CPU.
-3. **Picks the best model** that fits your RAM and still responds at a usable speed.
-4. **Compresses** (quantizes) it so a bigger, smarter model fits, then **checks the quality** to make sure it still answers about as well as the original.
-5. **Tunes and runs** it: threads, context size and batch size are set for your machine. You get a web chat in your browser and an OpenAI-compatible API.
+That 2013 iMac in the corner, the ThinkPad in a drawer, the tower under the desk can all run a capable AI assistant, fully offline. And if one isn't enough, Tlav can **combine several old computers** to run a model none of them could hold alone.
 
 ```bash
 tlav setup
 ```
 
-That's it. One command, and you're chatting with a local AI.
+One command. Tlav:
+
+1. **Detects** your hardware: RAM, CPU cores, AVX/AVX2/AVX-512, GPU, disk.
+2. **Benchmarks** memory bandwidth, which decides how fast a model can talk on a CPU, and self-calibrates against real runs.
+3. **Finds the best model**, either from its curated catalog or from **any GGUF model on Hugging Face** (`tlav search`), by reading each file's real architecture.
+4. **Makes it use less RAM** with measured, near-lossless compression and a compressed context cache, then **verifies the quality**.
+5. **Speeds it up** with speculative decoding, which gives exactly the same answers, faster.
+6. **Runs it**: a web chat in your browser plus an OpenAI-compatible API. It can also run at boot as an always-on AI box.
 
 ---
 
 ## Install
 
-Requires Python 3.8+ (no other Python packages). On first setup Tlav installs [llama.cpp](https://github.com/ggml-org/llama.cpp), the fastest CPU inference engine for old hardware.
+Requires Python 3.8+ and nothing else. On first setup Tlav builds [llama.cpp](https://github.com/ggml-org/llama.cpp), tuned for your exact CPU.
 
 **macOS / Linux**
 ```bash
@@ -29,89 +30,145 @@ git clone https://github.com/ArhaanDev24/Tlavv && cd Tlavv && ./install.sh
 
 **Windows (PowerShell)**
 ```powershell
-./install.ps1
+git clone https://github.com/ArhaanDev24/Tlavv; cd Tlavv; ./install.ps1
 ```
 
 ### Intel Macs (2010–2020), including the 2013 iMac
-Old macOS versions aren't supported by prebuilt llama.cpp binaries, so Tlav builds it from source with your CPU's AVX2 instructions switched on and Metal switched off (old Intel/NVIDIA Mac GPUs are slower than the CPU for this). You need Apple's command line tools once:
+Tlav builds llama.cpp from source with AVX2 on and Metal off (old Mac GPUs are slower than the CPU for this). You need Apple's command line tools once:
 ```bash
 xcode-select --install
 ```
-If `cmake` is missing, Tlav installs it with pip automatically.
 
 ## What will my machine run?
 
-Check before you download anything:
 ```bash
-tlav doctor              # what Tlav sees
-tlav recommend           # ranked models for this machine
-tlav recommend --ram 16  # simulate another machine
+tlav doctor                   # what Tlav sees
+tlav recommend                # ranked models for this machine
+tlav recommend --ram 16       # simulate a 16 GB machine
+tlav recommend --ram 16 --ram 16   # simulate two 16 GB machines working together
 ```
 
-Typical results on a 2013 iMac (quad-core Haswell i5, DDR3-1600):
+Typical picks for a 2013 iMac (quad-core Haswell, DDR3-1600):
 
-| RAM   | Best pick                       | RAM used | Speed        |
-|-------|---------------------------------|----------|--------------|
-| 8 GB  | Qwen2.5 7B @ Q4_K_M             | ~4.9 GB  | ~3–4 tok/s   |
-| 16 GB | Qwen3 8B @ Q4_K_M               | ~6.1 GB  | ~3 tok/s     |
-| 32 GB | Qwen3 30B-A3B (MoE) @ Q5_K_M    | ~21 GB   | ~6–7 tok/s   |
+| Setup | Best pick | RAM used | Speed |
+|---|---|---|---|
+| 8 GB | Qwen2.5 7B @ Q4_K_M | ~4.9 GB | ~3–4 tok/s |
+| 16 GB | Qwen3 8B @ Q4_K_M (+ draft model) | ~7 GB | ~3 tok/s, more with speculative decoding |
+| 32 GB | Qwen3 30B-A3B (MoE) @ Q5_K_M | ~21 GB | ~6–7 tok/s |
+| **two 16 GB PCs** | **Qwen3 30B-A3B (MoE) @ Q5_K_M, split 24 + 24 layers** | ~11 GB each | ~6–7 tok/s on Ethernet |
 
-Want quicker replies? `tlav setup --min-tps 5` prefers faster models (for example Qwen3 4B at ~5–6 tok/s).
-For programming help, use `tlav setup --task code`.
+`tlav setup --min-tps 5` prefers faster models, and `tlav setup --task code` picks coding models.
 
-> Mixture-of-experts models (like Qwen3 30B-A3B) are perfect for old machines with lots of RAM: they store 30B parameters of knowledge but read only ~3B per word, so they run faster than an 8B model.
+---
+
+## Combine computers (cluster mode)
+
+Yes, you can pool several old computers into one bigger AI machine. Tlav uses llama.cpp's RPC backend to **split the model's layers across machines**, so their RAM adds up.
+
+```
+ ┌──────────── main PC ────────────┐        ┌──── worker PC ────┐
+ │ tlav run --cluster              │  LAN   │ tlav worker       │
+ │ layers 1–24 + web chat + API    │ ◄────► │ layers 25–48      │
+ └─────────────────────────────────┘        └───────────────────┘
+```
+
+**On every helper computer:**
+```bash
+tlav worker
+```
+
+**On the main computer:**
+```bash
+tlav cluster scan            # finds the workers automatically
+tlav recommend --cluster     # what the combined machines can run
+tlav setup --cluster         # pick, download, split and run it
+```
+
+If your network blocks discovery, add a worker by address: `tlav cluster add 192.168.1.23`.
+
+**What to expect (honestly):**
+- **It pools memory, not speed.** Each word passes through every machine in turn, so a split model runs at roughly the speed of its parts added together, plus network delay. Use a cluster to run a *bigger, smarter* model than any one machine could hold. Tlav never splits a model that fits on one computer.
+- **Answers are identical** to running on one machine. We tested a 3-way split against a single PC and got word-for-word the same output.
+- **Use Ethernet.** Gigabit Ethernet works well, Wi-Fi works but is slower. `tlav cluster list` shows the delay to each worker and rates the connection.
+- **Only the main PC downloads the model.** Workers receive their share over the network and cache it, so the next start is faster.
+- **Security:** a worker accepts work from anyone who can reach it, with no password. Only run it on a home network you trust, never on public Wi-Fi, and never forward its port (50052) on your router. `tlav worker --token WORD` stops accidental joins but is not real security.
+
+---
+
+## Find any model
+
+```bash
+tlav search qwen
+tlav search "llama 3.2" --task code
+tlav setup --hf bartowski/Qwen_Qwen3-8B-GGUF
+```
+
+Tlav searches Hugging Face, then reads each model's real architecture straight from its GGUF header. It downloads only a few MB per model, not the whole file, so it can tell how much RAM and speed **every** compression level of **any** model would need on your machine. It works with models newer than Tlav itself. `tlav models --update` refreshes the curated catalog.
+
+---
+
+## Less RAM, same quality
+
+Everything below is **measured**, not assumed.
+
+| Technique | What it saves | Quality impact | How Tlav makes sure |
+|---|---|---|---|
+| **Weight compression** (quantization) | 16 → ~5 bits per weight, 3–4× smaller | Q8/Q6: practically none; Q5: ~1%; Q4_K_M: ~1–3% | Measures perplexity vs the original; any level over 3% is rejected and Tlav steps up a level |
+| **Importance-matrix compression** | Same size, protects the weights that matter most | Measured on a 0.5B model: Q3_K_M loss halved (+8.2% → +3.9%) | Tries standard *and* importance-matrix compression, keeps whichever measures better |
+| **Compressed context cache** (q8_0 KV) | Halves the memory for conversation history: 2× longer chats, or a bigger model | Measured: +0.3–0.5% | `--kv-check` measures it on your model; above 0.5% it falls back to full precision |
+| **Speculative decoding** | (speed) | **Zero**: the output is identical | Tested: Qwen2.5 3B went **9.6 → 15.7 tok/s** with byte-identical output |
+| **Right-sized buffers** | Up to 8 GB: llama-server's default prompt cache and extra chat slots | None | One slot for one user; the prompt cache only gets truly spare RAM |
+| **mmap / mlock** | Fast loading, nothing swapped out | None | `mlock` only when there's spare RAM; `--low-ram` profile for tight machines |
+
+Want zero noticeable loss? `tlav setup --max-quality` allows only Q6_K/Q8_0 (measured change under 0.5%).
+
+A bigger model compressed to Q4_K_M almost always beats a smaller model kept at full precision. That trade is what lets Tlav run "a larger, better model" on your machine.
+
+---
 
 ## Commands
 
 | Command | What it does |
 |---|---|
 | `tlav setup` | Everything: detect → benchmark → pick → download/compress → tune → run |
-| `tlav doctor` | Hardware report and RAM budget |
-| `tlav bench [--real]` | Memory bandwidth benchmark; `--real` measures true tokens/s with llama-bench |
-| `tlav recommend` | Ranked model list (`--task code`, `--aggressive`, `--ram 16` to simulate) |
-| `tlav models` | Model catalog and compression levels |
-| `tlav compress --model qwen3-8b --fit` | Compress a model as little as possible to fit this machine, then verify quality |
-| `tlav compress --file my-model-f16.gguf --to Q4_K_M` | Compress your own GGUF file |
-| `tlav run` | Start the server + web chat (`--host 0.0.0.0` to use it from your phone or other PCs) |
+| `tlav setup --cluster` / `--hf REPO` / `--max-quality` | Use workers / any Hugging Face model / near-lossless only |
+| `tlav doctor` | Hardware report, RAM budget, cluster support |
+| `tlav bench [--real]` | Bandwidth benchmark; `--real` measures true tok/s and calibrates future estimates |
+| `tlav recommend` | Ranked models (`--cluster`, `--task code`, `--ram 16 --ram 8` to simulate) |
+| `tlav search QUERY` | Find GGUF models on Hugging Face that fit this machine or cluster |
+| `tlav models [--update]` | Curated catalog and compression levels |
+| `tlav compress --model ID --fit` | Compress as little as possible to fit, verify quality |
+| `tlav compress --file X-f16.gguf --to Q4_K_M --kv-check` | Compress your own model |
+| `tlav run [--detach] [--host 0.0.0.0]` | Start the server + web chat (0.0.0.0 = usable from phones/other PCs) |
+| `tlav status` / `tlav stop` | What's running and how much memory it really uses / stop it |
 | `tlav chat` | Chat in the terminal |
+| `tlav worker` | Share this PC's RAM and CPU with a main computer |
+| `tlav cluster scan/add/list/remove/clear` | Manage workers |
+| `tlav service install [--worker]` | Start at login (launchd / systemd / Task Scheduler): an always-on AI box |
 | `tlav install-runtime` | Install/rebuild llama.cpp tuned for this CPU |
 | `tlav list` | Downloaded models |
 
 Everything lives in `~/.tlav` (change it with `TLAV_HOME`).
 
-## Using it from other apps
+## Use it from other apps
 
-`tlav run` exposes an OpenAI-compatible API at `http://127.0.0.1:8080/v1`, so any app that lets you set an OpenAI base URL works (Open WebUI, Continue, editors, scripts):
+`tlav run` exposes an OpenAI-compatible API at `http://127.0.0.1:8080/v1`. Point any app that accepts an OpenAI base URL at it (Open WebUI, Continue, editors, scripts):
 
 ```bash
 curl http://127.0.0.1:8080/v1/chat/completions -H "Content-Type: application/json" \
   -d '{"messages":[{"role":"user","content":"Hello from my old iMac!"}]}'
 ```
 
-## Compression: how close to the original is it?
-
-Tlav compresses with quantization: weights are stored in small blocks with a shared scale and fewer bits per value (16 bits → about 5). It is not mathematically lossless, so Tlav doesn't just assume it worked. It **measures perplexity** (how well the model predicts text it hasn't seen; lower is better) for the original and the compressed model, and rejects any level that loses more than 3% (`--tolerance`). If a level fails, Tlav automatically tries the next, less compressed one.
-
-| Level  | Size vs original | Quality kept | Notes |
-|--------|------------------|--------------|-------|
-| Q8_0   | 53% | ~99.9% | practically identical |
-| Q6_K   | 41% | ~99.6% | practically identical |
-| Q5_K_M | 36% | ~99%   | near-lossless |
-| Q4_K_M | 30% | ~97–98% | default floor, best size/quality balance |
-| Q3_K_M | 24% | ~94%   | only with `--aggressive`, to fit a much better model |
-
-A bigger model compressed to Q4_K_M almost always beats a smaller model kept at full precision. That trade is what lets Tlav run "a larger, better model" on your machine.
-
-By default `tlav setup` downloads files that were already compressed with importance-matrix quantization, which preserves slightly more quality than plain local quantization and saves you hours on an old CPU. Use `--local-compress` to do it all on your machine instead.
-
 ## How the planner decides
 
-For every model × compression level:
+For every model × compression level × (one machine or a cluster):
 
-- **memory** = weights + KV cache for the context length + runtime overhead. It must fit in your RAM budget (total RAM minus room for the OS: at least 2 GB or 25%, plus 1 GB extra on macOS).
-- **speed** ≈ usable memory bandwidth ÷ bytes read per token (for MoE models, only the active experts count).
-- Models slower than `--min-tps` (default 2.5 tokens/s) are dropped. For each model, Tlav uses the least compression that still runs at a comfortable 5 tok/s, otherwise the fastest allowed level.
-- The winner is the highest quality score after compression.
+- **memory** = weights + context cache + runtime buffers. It must fit each machine's budget: total RAM minus room for the OS (at least 2 GB or 25%, plus 1 GB on macOS).
+- **speed** ≈ usable bandwidth ÷ bytes read per token. Mixture-of-experts models only count their active experts. Clusters add up each machine's share plus network round trips.
+- Models slower than `--min-tps` (default 2.5 tok/s) are dropped. For each model Tlav uses the least compression that still runs at a comfortable 5 tok/s, otherwise the fastest allowed level.
+- The winner has the highest quality score after compression. A draft model is added when RAM allows.
+
+Measured on the test machine: memory 2.7 GB actual vs 3.0 GB planned; speed 52 tok/s actual vs 55 planned.
 
 ## Development
 
@@ -119,6 +176,8 @@ For every model × compression level:
 pip install -e ".[dev]"
 pytest
 ```
+
+CI runs the unit tests on Linux, macOS and Windows. It also runs an end-to-end job that builds llama.cpp, compresses and quality-checks a model, serves it, and splits it across a 3-machine cluster, checking that the answers match.
 
 ## License
 

@@ -71,7 +71,8 @@ def download(repo: str, filename: str, dest_dir: Optional[Path] = None, quiet: b
             have = 0
         total = int(r.headers.get("Content-Length", 0)) + have
         mode = "ab" if have else "wb"
-        t0, done = time.time(), have
+        t0, done, last = time.time(), have, 0.0
+        tty = sys.stderr.isatty()
         with open(part, mode) as f:
             while True:
                 chunk = r.read(1 << 20)
@@ -79,10 +80,12 @@ def download(repo: str, filename: str, dest_dir: Optional[Path] = None, quiet: b
                     break
                 f.write(chunk)
                 done += len(chunk)
-                if not quiet and total:
+                now = time.time()
+                if not quiet and total and (now - last > (0.25 if tty else 10) or done == total):
+                    last = now
                     speed = (done - have) / max(time.time() - t0, 1e-6)
-                    sys.stderr.write(f"\r  {filename}: {_fmt(done)} / {_fmt(total)} "
-                                     f"({100 * done / total:.0f}%, {_fmt(speed)}/s)   ")
+                    sys.stderr.write(("\r" if tty else "") + f"  {filename}: {_fmt(done)} / {_fmt(total)} "
+                                     f"({100 * done / total:.0f}%, {_fmt(speed)}/s)   " + ("" if tty else "\n"))
                     sys.stderr.flush()
     if not quiet:
         sys.stderr.write("\n")

@@ -47,8 +47,24 @@ def quick_benchmark(save: bool = True) -> dict:
 
 
 def cached_or_run() -> dict:
-    b = config.load_state().get("benchmark")
-    return b if b else quick_benchmark()
+    """Benchmark result with the speed calibration from real runs applied."""
+    state = config.load_state()
+    b = dict(state.get("benchmark") or quick_benchmark())
+    cal = state.get("calibration", 1.0)
+    b["effective_gbps"] = round(b["effective_gbps"] * cal, 2)
+    b["calibration"] = cal
+    return b
+
+
+def calibrate(measured_tps: float, predicted_tps: float) -> float:
+    """Remember how far predictions were off on this machine (bounded, smoothed)."""
+    if predicted_tps <= 0 or measured_tps <= 0:
+        return config.load_state().get("calibration", 1.0)
+    ratio = max(0.3, min(3.0, measured_tps / predicted_tps))
+    old = config.load_state().get("calibration", 1.0)
+    new = round(old * ratio ** 0.7, 3)   # partial step: avoid over-reacting to one noisy run
+    config.save_state(calibration=max(0.3, min(3.0, new)))
+    return new
 
 
 def parse_llama_bench_json(text: str) -> dict:

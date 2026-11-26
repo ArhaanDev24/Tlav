@@ -4,32 +4,68 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from typing import List, Optional
 
-from . import __version__, benchmark, catalog, compress, config, hardware, hub, planner, runtime, server, tuner
-
-
-def _hw(args) -> hardware.Hardware:
-    if getattr(args, "ram", None):
-        return hardware.simulated(args.ram, cores=args.cores, simd=args.simd, gpu=args.gpu,
-                                  vram_gb=args.vram)
-    return hardware.detect()
+from . import (__version__, benchmark, catalog, cluster, compress, config, finder, gguf, hardware, hub,
+               planner, runtime, server, service, tuner)
 
 
-def _gbps(args, hw) -> float:
-    if getattr(args, "ram", None):
-        # simulated profile: dual-channel DDR3-1600 (e.g. 2013 iMac) decodes at ~16 GB/s
-        return args.bandwidth or 16.0
-    return benchmark.cached_or_run()["effective_gbps"]
+# ------------------------------------------------------------------ helpers
+
+def _min_quant(args) -> str:
+    if getattr(args, "max_quality", False):
+        return "Q6_K"
+    return catalog.AGGRESSIVE_MIN_QUANT if getattr(args, "aggressive", False) else catalog.DEFAULT_MIN_QUANT
+
+
+def _nodes(args) -> List[planner.Node]:
+    """This computer (real or simulated) plus cluster workers if requested."""
+    rams = getattr(args, "ram", None)
+    if rams:
+        sims = [hardware.simulated(r, cores=args.cores, simd=args.simd, gpu=args.gpu, vram_gb=args.vram)
+                for r in rams]
+        bw = args.bandwidth or 16.0  # dual-channel DDR3-1600 (e.g. 2013 iMac) decodes at ~16 GB/s
+        nodes = [planner.Node(sims[0], bw)]
+        nodes += [planner.Node(h, bw, endpoint=f"simulated-{i}:50052", latency_ms=0.5, name=f"simulated PC {i}")
+                  for i, h in enumerate(sims[1:], 2)]
+        return nodes
+    hw = hardware.detect()
+    nodes = [planner.Node(hw, benchmark.cached_or_run()["effective_gbps"])]
+    if getattr(args, "cluster", False):
+        workers = cluster.saved_workers()
+        if not workers:
+            sys.exit("No cluster workers saved. Run `tlav worker` on the other PCs, then `tlav cluster scan`.")
+        nodes += cluster.to_nodes(workers)
+        if len(nodes) == 1:
+            sys.exit("None of the saved workers are reachable.")
+    return nodes
+
+
+def _where(p: planner.Plan) -> str:
+    if not p.is_cluster:
+        return "this PC"
+    return " + ".join(f"{n.name.split('.')[0]}:{s}L" for n, s in zip(p.nodes, p.split))
 
 
 def _print_plans(plans, top):
-    print(f"{'#':<3}{'Model':<28}{'Compression':<12}{'RAM use':>9}{'Speed':>12}{'Quality':>9}  Context")
+    print(f"{'#':<3}{'Model':<30}{'Compression':<13}{'RAM use':>8}{'Speed':>12}{'Quality':>9}  {'Context':<8}Where")
     for i, p in enumerate(plans[:top], 1):
-        print(f"{i:<3}{p.model.name:<28}{p.quant.name:<12}{p.memory_gb:>7.1f}GB"
-              f"{p.est_tps:>8.1f} t/s{p.quality:>9.1f}  {p.ctx}")
+        extra = " +draft" if p.draft else ""
+        print(f"{i:<3}{p.model.name[:29]:<30}{p.quant.name:<13}{p.memory_gb:>6.1f}GB"
+              f"{p.est_tps:>8.1f} t/s{p.quality:>9.1f}  {p.ctx:<8}{_where(p)}{extra}")
 
 
-# ------------------------------------------------------------------ commands
+def _cluster_notes(plan: planner.Plan) -> None:
+    if not plan.is_cluster:
+        return
+    print("\n  Cluster: layers are split across machines, so their RAM adds up. Every token passes through")
+    print("  each machine in turn: this runs a BIGGER model, not a faster one. Use Ethernet if you can.")
+    for n, s in zip(plan.nodes, plan.split):
+        lat = f", {n.latency_ms:.1f} ms ({cluster.network_advice(n.latency_ms)})" if n.endpoint else ""
+        print(f"    {n.name:<22} {s:>3} layers  budget {n.budget:.1f} GB{lat}")
+
+
+# ------------------------------------------------------------------ info commands
 
 def cmd_doctor(args):
     hw = hardware.detect()
@@ -43,6 +79,10 @@ def cmd_doctor(args):
         print("Note:", note)
     rt = runtime.status()
     print("\nRuntime (llama.cpp):", "installed" if rt["llama-server"] else "not installed (`tlav install-runtime`)")
+    print("Cluster support:    ", "yes" if rt["rpc-server"] else "no (reinstall runtime: `tlav install-runtime`)")
+    workers = cluster.saved_workers()
+    if workers:
+        print(f"Cluster workers:     {len(workers)} saved ({', '.join(w['endpoint'] for w in workers)})")
     config.save_state(hardware=hw.to_dict())
 
 
@@ -51,39 +91,58 @@ def cmd_bench(args):
     b = benchmark.quick_benchmark()
     print(f"  raw memory bandwidth:  {b['bandwidth_gbps']:.1f} GB/s")
     print(f"  usable for inference:  {b['effective_gbps']:.1f} GB/s")
-    if args.real:
-        model = args.model or config.load_state().get("active", {}).get("path")
-        if not model:
-            sys.exit("No model to benchmark; pass --model PATH or run `tlav setup` first.")
-        hw = hardware.detect()
-        print(f"Running llama-bench on {model} ...")
-        r = benchmark.real_benchmark(model, hw.physical_cores, runtime.require("llama-bench"))
-        if r:
-            print(f"  prompt processing: {r.get('prompt_tps', 0):.1f} tok/s")
-            print(f"  generation:        {r.get('gen_tps', 0):.1f} tok/s")
-        else:
-            print("  llama-bench failed.")
+    if not args.real:
+        return
+    active = config.load_state().get("active", {})
+    model = args.model or active.get("path")
+    if not model:
+        sys.exit("No model to benchmark; pass --model PATH or run `tlav setup` first.")
+    hw = hardware.detect()
+    print(f"Running llama-bench on {Path(model).name} ...")
+    r = benchmark.real_benchmark(model, hw.physical_cores, runtime.require("llama-bench"))
+    if not r:
+        print("  llama-bench failed.")
+        return
+    print(f"  prompt processing: {r.get('prompt_tps', 0):.1f} tok/s")
+    print(f"  generation:        {r.get('gen_tps', 0):.1f} tok/s")
+    info = gguf.read(model)
+    m = info.to_model("bench")
+    q = catalog.quant_from_file(Path(model).stat().st_size, m.params_b)
+    predicted = planner.estimate_tps(m, q, b["effective_gbps"], hw)
+    cal = benchmark.calibrate(r.get("gen_tps", 0), predicted)
+    print(f"  predicted {predicted:.1f} tok/s -> calibration factor now {cal:.2f} (used for future estimates)")
 
 
 def cmd_models(args):
+    if args.update:
+        try:
+            n = catalog.update()
+            print(f"Catalog updated: {n} models.")
+        except Exception as e:
+            sys.exit(f"Could not update catalog ({e}). Private repo? set GITHUB_TOKEN or TLAV_CATALOG_URL.")
+        return
     print(f"{'ID':<22}{'Name':<28}{'Params':>8}  Q4_K_M size  Tags")
     q4 = catalog.QUANT_BY_NAME["Q4_K_M"]
     for m in catalog.load():
         size = f"{m.params_b:.1f}B" + ("*" if m.is_moe else "")
         print(f"{m.id:<22}{m.name:<28}{size:>8}  {m.weights_gb(q4):>8.1f} GB  {', '.join(m.tags)}")
     print("\n* mixture-of-experts: reads only a few billion parameters per token, so it runs fast.")
+    print("Not listed? `tlav search <name>` finds any GGUF model on Hugging Face.")
     print("\nCompression levels:")
     for q in catalog.QUANTS:
         print(f"  {q.name:<8} {q.bpw:>5.2f} bits/weight  keeps ~{q.retention * 100:.1f}% quality  ({q.note})")
 
 
 def cmd_recommend(args):
-    hw = _hw(args)
-    gbps = _gbps(args, hw)
-    min_q = catalog.AGGRESSIVE_MIN_QUANT if args.aggressive else catalog.DEFAULT_MIN_QUANT
-    plans = planner.candidates(hw, gbps, task=args.task, min_tps=args.min_tps, min_quant=min_q)
-    print(f"Machine: {hw.ram_total_gb:.0f} GB RAM, {hw.physical_cores} cores, {hw.simd.upper()}, "
-          f"{hw.gpu}; budget {planner.ram_budget_gb(hw):.1f} GB, ~{gbps:.1f} GB/s usable bandwidth\n")
+    nodes = _nodes(args)
+    plans = planner.candidates(nodes[0].hw, nodes[0].gbps, task=args.task, min_tps=args.min_tps,
+                               min_quant=_min_quant(args), kv=args.kv, workers=nodes[1:])
+    plans = [planner.attach_draft(p) for p in plans] if not args.no_draft else plans
+    total = sum(n.budget for n in nodes)
+    hw = nodes[0].hw
+    who = f"{len(nodes)} computers" if len(nodes) > 1 else f"{hw.ram_total_gb:.0f} GB RAM, {hw.physical_cores} cores"
+    print(f"Machine: {who}, {hw.simd.upper()}, {hw.gpu}; model budget {total:.1f} GB, "
+          f"~{nodes[0].gbps:.1f} GB/s usable bandwidth, context cache {args.kv}\n")
     if not plans:
         print("No model fits comfortably. Try --min-tps 1 or --aggressive.")
         return
@@ -91,8 +150,30 @@ def cmd_recommend(args):
         print(json.dumps([p.to_dict() for p in plans[: args.top]], indent=2))
         return
     _print_plans(plans, args.top)
-    print(f"\nBest pick: {plans[0].label}  ->  `tlav setup` installs and runs it.")
+    best = plans[0]
+    print(f"\nBest pick: {best.label}  ->  `tlav setup{' --cluster' if best.is_cluster else ''}`")
+    _cluster_notes(best)
 
+
+def cmd_search(args):
+    nodes = _nodes(args)
+    print(f"Searching Hugging Face for '{args.query}' and checking each model against your "
+          f"{'cluster' if len(nodes) > 1 else 'machine'}...\n")
+    results = finder.search(args.query, nodes, limit=args.top, task=args.task, min_tps=args.min_tps,
+                            min_quant=_min_quant(args))
+    print(f"{'Repository':<52}{'Params':>8}  {'Best fit':<12}{'RAM':>7}{'Speed':>11}  Downloads")
+    for r in results:
+        params = f"{r.model.params_b:.1f}B" if r.info else "?"
+        if r.plan:
+            p = r.plan
+            fit = f"{p.quant.name:<12}{p.memory_gb:>5.1f}GB{p.est_tps:>7.1f} t/s"
+        else:
+            fit = f"{'-':<12}{(r.error or 'too big/slow'):<23}"[:35]
+        print(f"{r.repo[:51]:<52}{params:>8}  {fit}  {r.downloads:,}")
+    print("\nInstall one with:  tlav setup --hf <repository>")
+
+
+# ------------------------------------------------------------------ runtime
 
 def cmd_install_runtime(args):
     hw = hardware.detect()
@@ -104,28 +185,53 @@ def cmd_install_runtime(args):
     print(f"llama.cpp ready in {path}")
 
 
-def _resolve_plan(args, hw, gbps):
-    min_q = catalog.AGGRESSIVE_MIN_QUANT if args.aggressive else catalog.DEFAULT_MIN_QUANT
+# ------------------------------------------------------------------ setup
+
+def _resolve_plan(args, nodes):
+    """Returns (plan, files) where files maps quant -> filename when using --hf."""
+    if args.hf:
+        model, files = finder.model_from_repo(args.hf)
+        sizes = {q: s for q, (_, s) in finder.repo_files(args.hf).items()}
+        quants = [catalog.quant_from_file(sizes[q], model.params_b, q) for q in files]
+        if args.quant:
+            quants = [q for q in quants if q.name == args.quant.upper()]
+        plan = planner.plan_for_model(model, nodes, args.task, args.min_tps, _min_quant(args), args.kv, quants)
+        if not plan:
+            plan = planner.plan_for_model(model, nodes, args.task, 0.5, catalog.AGGRESSIVE_MIN_QUANT, args.kv, quants)
+            if plan:
+                print(f"  note: {args.hf} will be slow here (~{plan.est_tps:.1f} tok/s)")
+        if not plan:
+            sys.exit(f"{args.hf} does not fit this {'cluster' if len(nodes) > 1 else 'machine'}.")
+        return plan, files
     if args.model:
         model = catalog.get(args.model)
         if args.quant:
-            plan = planner.evaluate(model, catalog.QUANT_BY_NAME[args.quant], hw, gbps, args.task)
+            q = catalog.QUANT_BY_NAME[args.quant]
+            plan = planner.evaluate_nodes(model, q, nodes[:1], args.task, args.kv)
+            if not plan and len(nodes) > 1:
+                plan = planner.evaluate_nodes(model, q, nodes, args.task, args.kv)
             if not plan:
-                sys.exit(f"{model.name} at {args.quant} does not fit this machine.")
-            return plan
-        plan = planner.best_quant_for(model, hw, gbps, min_quant=min_q)
+                sys.exit(f"{model.name} at {args.quant} does not fit.")
+            return plan, None
+        plan = planner.plan_for_model(model, nodes, args.task, 0.5, _min_quant(args), args.kv)
         if not plan:
-            sys.exit(f"{model.name} does not fit this machine even when compressed.")
-        return plan
-    plan = planner.best(hw, gbps, task=args.task, min_tps=args.min_tps, min_quant=min_q)
-    if not plan:
-        sys.exit("No model fits comfortably. Try `tlav setup --aggressive` or `--min-tps 1`.")
-    return plan
+            sys.exit(f"{model.name} does not fit even when compressed. Try --cluster with another PC.")
+        return plan, None
+    plans = planner.candidates(nodes[0].hw, nodes[0].gbps, task=args.task, min_tps=args.min_tps,
+                               min_quant=_min_quant(args), kv=args.kv, workers=nodes[1:])
+    if not plans:
+        sys.exit("No model fits comfortably. Try `tlav setup --aggressive`, `--min-tps 1`, or a cluster.")
+    _print_plans(plans, 3)
+    return plans[0], None
 
 
-def _obtain_model(plan, hw, local_compress: bool) -> Path:
-    files = hub.list_files(plan.model.repo)
-    ready = hub.find_quant_file(files, plan.quant.name)
+def _obtain_model(plan, hw, local_compress: bool, files: Optional[dict] = None) -> Path:
+    if files:  # --hf repo
+        fn = files[plan.quant.name]
+        print(f"Downloading {fn} ...")
+        return hub.download(plan.model.repo, fn)
+    names = hub.list_files(plan.model.repo)
+    ready = hub.find_quant_file(names, plan.quant.name)
     if ready and not local_compress:
         print(f"Downloading pre-compressed {ready} ...")
         return hub.download(plan.model.repo, ready)
@@ -134,62 +240,97 @@ def _obtain_model(plan, hw, local_compress: bool) -> Path:
     return Path(res["path"])
 
 
+def _obtain_draft(plan) -> Optional[Path]:
+    if not plan.draft:
+        return None
+    names = hub.list_files(plan.draft.repo)
+    fn = hub.find_quant_file(names, "Q8_0")
+    if not fn:
+        plan.draft = None
+        return None
+    print(f"Downloading draft model {fn} (for faster, identical answers) ...")
+    return hub.download(plan.draft.repo, fn)
+
+
 def cmd_setup(args):
     print("Step 1/5  Detecting hardware")
     hw = hardware.detect()
     print("  " + hw.summary().replace("\n", "\n  "))
     print("\nStep 2/5  Benchmarking")
-    gbps = benchmark.quick_benchmark()["effective_gbps"] if not args.skip_bench else benchmark.cached_or_run()["effective_gbps"]
-    print(f"  usable memory bandwidth: {gbps:.1f} GB/s")
-    print("\nStep 3/5  Choosing the best model for this machine")
-    plan = _resolve_plan(args, hw, gbps)
-    if not args.model:
-        _print_plans(planner.candidates(hw, gbps, task=args.task, min_tps=args.min_tps), 3)
-    print(f"\n  -> {plan.label}: ~{plan.memory_gb:.1f} GB RAM, ~{plan.est_tps:.1f} tokens/s, "
-          f"{plan.quant.note}")
-    if not args.yes:
-        if input("\nProceed? [Y/n] ").strip().lower() in ("n", "no"):
-            return
+    if not args.skip_bench:
+        benchmark.quick_benchmark()
+    nodes = _nodes(args)
+    print(f"  usable memory bandwidth: {nodes[0].gbps:.1f} GB/s")
+    if len(nodes) > 1:
+        print(f"  cluster: {len(nodes) - 1} worker(s): " + ", ".join(f"{n.name} ({n.budget:.1f} GB)" for n in nodes[1:]))
+    print("\nStep 3/5  Choosing the best model")
+    plan, files = _resolve_plan(args, nodes)
+    if not args.no_draft and not files:
+        plan = planner.attach_draft(plan)
+    print(f"\n  -> {plan.label}: ~{plan.memory_gb:.1f} GB RAM, ~{plan.est_tps:.1f} tokens/s, {plan.quant.note}")
+    print(f"     context cache: {plan.kv} ({'half the memory of f16, quality checked' if plan.kv != 'f16' else 'full precision'})")
+    if plan.draft:
+        print(f"     speculative decoding with {plan.draft.name}: same answers, usually faster")
+    _cluster_notes(plan)
+    if not args.yes and input("\nProceed? [Y/n] ").strip().lower() in ("n", "no"):
+        return
     print("\nStep 4/5  Installing runtime and model")
-    if not runtime.find("llama-server"):
+    if not runtime.find("llama-server") or (plan.is_cluster and not runtime.find("rpc-server")):
         note = runtime.platform_note(hw)
         if note:
             print("  " + note)
         runtime.install(hw)
-    path = _obtain_model(plan, hw, args.local_compress)
-    s = tuner.settings(plan, hw)
-    config.save_state(active={"path": str(path), "plan": plan.to_dict(), "settings": s})
+    path = _obtain_model(plan, hw, args.local_compress, files)
+    draft = _obtain_draft(plan)
+    if args.kv_check and plan.kv != "f16":
+        print("  Checking that the compressed context cache keeps quality...")
+        res = compress.kv_check(path, hw.physical_cores, plan.kv)
+        print(f"  context cache {res['kv']}: {res.get('delta_pct', '?')}% perplexity change")
+        plan.kv = res["kv"]
+    s = tuner.settings(plan, hw, low_ram=args.low_ram)
+    config.save_state(active={"path": str(path), "draft_path": str(draft) if draft else None,
+                              "plan": plan.to_dict(), "settings": s})
     print(f"  model: {path}")
-    print(f"  settings: {s}")
     if args.no_run:
-        print("\nDone. Start it any time with `tlav run`.")
+        print("\nDone. Start it any time with `tlav run`" + (" (keep the workers running)." if plan.is_cluster else "."))
         return
     print("\nStep 5/5  Starting your local AI")
-    _run_active(args.host, args.port, not args.no_browser)
+    _launch(path, s, args.host, args.port, not args.no_browser, draft=draft, detach=args.detach)
 
 
-def _run_active(host, port, browser, model_path=None):
-    state = config.load_state()
-    active = state.get("active")
-    if model_path:
-        hw = hardware.detect()
-        size = Path(model_path).stat().st_size / 1024 ** 3
-        s = {"threads": hw.physical_cores, "threads_batch": hw.logical_cores, "ctx": 4096,
-             "batch": 512 if hw.ram_total_gb >= 12 else 256, "ubatch": 256, "mlock": False, "gpu_layers": 0}
-        if hw.ram_total_gb - size < 4:
-            s["ctx"] = 2048
-    elif active:
-        model_path, s = active["path"], active["settings"]
-    else:
-        sys.exit("No model set up yet. Run `tlav setup` first (or `tlav run --model file.gguf`).")
-    args = tuner.server_args(model_path, s, host=host, port=port)
-    print(f"Loading {Path(model_path).name} (first load can take a minute on old disks)...")
-    proc = server.start(args)
+# ------------------------------------------------------------------ run / chat / status
+
+def _plan_for_file(path: Path, nodes, kv: str, force_split: bool = False) -> Optional[planner.Plan]:
+    try:
+        info = gguf.read(str(path))
+    except (ValueError, OSError, EOFError) as e:
+        print(f"  could not read model header ({e}); using safe defaults")
+        return None
+    model = info.to_model(path.stem)
+    q = catalog.quant_from_file(path.stat().st_size, model.params_b)
+    plan = None if force_split else planner.evaluate_nodes(model, q, nodes[:1], kv=kv)
+    if not plan and len(nodes) > 1:
+        plan = planner.evaluate_nodes(model, q, nodes, kv=kv)
+    return plan
+
+
+def _launch(model_path, s, host, port, browser, draft=None, detach=False):
+    args = tuner.server_args(str(model_path), s, host=host, port=port,
+                             draft_path=str(draft) if draft else None)
+    print(f"Loading {Path(model_path).name}"
+          + (f" across {len(s['rpc']) + 1} computers" if s.get("rpc") else "")
+          + " (first load can take a few minutes on old disks/networks)...")
+    proc = server.start(args, detach=detach)
     url = config.load_state()["server_url"]
     print(f"\nReady!  Web chat: {url}   OpenAI-compatible API: {url}/v1")
-    print("Press Ctrl+C to stop.")
+    if host == "0.0.0.0":
+        print(f"From phones/other PCs on your network: http://{cluster.lan_ip()}:{port}")
     if browser:
         server.open_browser(url)
+    if detach:
+        print("Running in the background. `tlav status` to check, `tlav stop` to stop.")
+        return
+    print("Press Ctrl+C to stop.")
     try:
         proc.wait()
     except KeyboardInterrupt:
@@ -198,15 +339,133 @@ def _run_active(host, port, browser, model_path=None):
 
 
 def cmd_run(args):
-    _run_active(args.host, args.port, not args.no_browser, args.model)
+    if server.status()["running"]:
+        sys.exit("Tlav is already running (`tlav status`). Stop it first with `tlav stop`.")
+    nodes = _nodes(args) if args.cluster else None
+    if args.model:
+        path = Path(args.model).expanduser()
+        hw = hardware.detect()
+        nodes = nodes or [planner.Node(hw, benchmark.cached_or_run()["effective_gbps"])]
+        plan = _plan_for_file(path, nodes, args.kv, force_split=args.force_split)
+        if plan:
+            s = tuner.settings(plan, hw, low_ram=args.low_ram)
+            if plan.is_cluster:
+                _cluster_notes(plan)
+        else:
+            s = {"threads": hw.physical_cores, "threads_batch": hw.logical_cores, "ctx": 2048, "batch": 256,
+                 "ubatch": 128, "mlock": False, "gpu_layers": 0, "kv": args.kv, "rpc": [], "tensor_split": []}
+        return _launch(path, s, args.host, args.port, not args.no_browser, detach=args.detach)
+    active = config.load_state().get("active")
+    if not active:
+        sys.exit("No model set up yet. Run `tlav setup` first (or `tlav run --model file.gguf`).")
+    s = active["settings"]
+    if args.cluster and not s.get("rpc"):
+        sys.exit("The set-up model runs on this PC alone. Re-run `tlav setup --cluster` to plan a cluster.")
+    if s.get("rpc"):
+        down = [e for e in s["rpc"] if cluster.ping(e, tries=1) is None]
+        if down:
+            sys.exit(f"Cluster worker(s) not reachable: {', '.join(down)}. Start `tlav worker` there first.")
+    draft = active.get("draft_path") if not args.no_draft else None
+    _launch(active["path"], s, args.host, args.port, not args.no_browser, draft=draft, detach=args.detach)
+
+
+def cmd_status(args):
+    st = server.status()
+    if not st["running"]:
+        print("Tlav is not running. Start it with `tlav run` (add --detach to run in the background).")
+    else:
+        print(f"Running (pid {st['pid']}) at {st['url']}")
+        mem = st.get("memory") or {}
+        if mem.get("used") is not None:
+            extra = f" (+{mem['cache']:.2f} GB file cache the OS can reclaim)" if mem.get("cache") else ""
+            print(f"  memory in use: {mem['used']:.2f} GB{extra}")
+        if st.get("model_path"):
+            print(f"  model: {Path(st['model_path']).name}   context: {st.get('ctx')}")
+    act = st.get("active")
+    if act:
+        p = act["plan"]
+        print(f"Set-up model: {p['model']} @ {p['quant']}, ~{p['memory_gb']} GB, ~{p['est_tps']} tok/s"
+              + (f", cluster {p['nodes']}" if p.get("nodes") else ""))
+    if args.json:
+        print(json.dumps(st, indent=2, default=str))
+
+
+def cmd_stop(args):
+    print("Stopped." if server.stop() else "Tlav was not running.")
 
 
 def cmd_chat(args):
     url = args.url or config.load_state().get("server_url", "http://127.0.0.1:8080")
     if not server.healthy(url):
-        sys.exit(f"No server at {url}. Start one with `tlav run` in another terminal.")
+        sys.exit(f"No server at {url}. Start one with `tlav run --detach` (or in another terminal).")
     server.chat_loop(url, args.system)
 
+
+# ------------------------------------------------------------------ cluster
+
+def cmd_worker(args):
+    if not runtime.find("rpc-server"):
+        hw = hardware.detect()
+        print("This computer needs the AI engine with cluster support; installing it now.")
+        runtime.install(hw)
+    cluster.run_worker(host=args.host, port=args.port, token=args.token, discovery_port=args.discovery_port,
+                       cache=not args.no_cache, threads=args.threads, mem_mb=args.mem)
+
+
+def cmd_cluster(args):
+    if args.action == "scan":
+        print("Looking for Tlav workers on your network...")
+        found = cluster.scan(timeout=args.timeout, token=args.token, port=args.discovery_port)
+        if not found:
+            print("None found. Make sure `tlav worker` runs on the other PCs, or add one by IP:\n"
+                  "  tlav cluster add 192.168.1.23")
+            return
+        saved = []
+        for w in found:
+            w["latency_ms"] = cluster.ping(w["endpoint"]) or 0.0
+            hw = w.get("hardware") or {}
+            print(f"  {w['hostname']:<20} {w['endpoint']:<22} {hw.get('ram_total_gb', 0):>5.0f} GB RAM  "
+                  f"{hw.get('physical_cores', '?')} cores  {w['latency_ms']:.1f} ms "
+                  f"({cluster.network_advice(w['latency_ms'])})")
+            saved.append(w)
+        others = [x for x in cluster.saved_workers() if x["endpoint"] not in {w["endpoint"] for w in saved}]
+        cluster.save_workers(others + saved)
+        print(f"\nSaved. Now: `tlav recommend --cluster` or `tlav setup --cluster`.")
+    elif args.action == "add":
+        if not args.address:
+            sys.exit("Usage: tlav cluster add IP[:PORT]")
+        w = cluster.add_worker(args.address, token=args.token, port=args.discovery_port)
+        print(f"Added {w['hostname']} at {w['endpoint']} ({w['latency_ms']:.1f} ms, "
+              f"{cluster.network_advice(w['latency_ms'])})")
+        if not w.get("hardware"):
+            print("  (worker did not answer discovery; assuming 8 GB RAM. Open UDP 50053 for exact info.)")
+    elif args.action == "remove":
+        print("Removed." if cluster.remove_worker(args.address or "") else "No such worker.")
+    elif args.action == "clear":
+        cluster.save_workers([])
+        print("Cluster cleared.")
+    else:
+        workers = cluster.saved_workers()
+        if not workers:
+            print("No workers saved. Run `tlav worker` on other PCs, then `tlav cluster scan`.")
+        for w in workers:
+            lat = cluster.ping(w["endpoint"], tries=1)
+            state = f"online, {lat:.1f} ms" if lat is not None else "OFFLINE"
+            ram = (w.get("hardware") or {}).get("ram_total_gb", "?")
+            print(f"  {w.get('hostname', '?'):<20} {w['endpoint']:<22} {ram} GB RAM  {state}")
+
+
+def cmd_service(args):
+    role = "worker" if args.worker else "server"
+    if args.action == "install":
+        if role == "server" and not config.load_state().get("active"):
+            sys.exit("Run `tlav setup --no-run` first so the service knows which model to start.")
+        print(service.install(role, host=args.host, port=args.port))
+    else:
+        print(service.uninstall(role))
+
+
+# ------------------------------------------------------------------ compress / list
 
 def cmd_compress(args):
     hw = hardware.detect()
@@ -215,11 +474,18 @@ def cmd_compress(args):
         if not src.exists():
             sys.exit(f"{src} not found")
         target = args.to or "Q4_K_M"
+        if args.fit:
+            info = gguf.read(str(src))
+            model = info.to_model(src.stem)
+            plan = planner.best_quant_for(model, hw, benchmark.cached_or_run()["effective_gbps"])
+            if not plan:
+                sys.exit("This model does not fit this machine even at Q3_K_M. Try a cluster.")
+            target = plan.quant.name
+            print(f"Least compression that fits this machine: {target} (~{plan.memory_gb:.1f} GB)")
     else:
         model = catalog.get(args.model)
         if args.fit or not args.to:
-            gbps = benchmark.cached_or_run()["effective_gbps"]
-            plan = planner.best_quant_for(model, hw, gbps)
+            plan = planner.best_quant_for(model, hw, benchmark.cached_or_run()["effective_gbps"])
             if not plan:
                 sys.exit(f"{model.name} does not fit this machine even at Q3_K_M.")
             target = plan.quant.name
@@ -228,18 +494,20 @@ def cmd_compress(args):
             target = args.to
         src = compress.fetch_source(model)
     res = compress.compress(src, target, hw.physical_cores, verify=not args.no_verify,
-                            tolerance_pct=args.tolerance)
+                            tolerance_pct=args.tolerance, use_imatrix=not args.no_imatrix)
+    if args.kv_check:
+        res["kv_check"] = compress.kv_check(Path(res["path"]), hw.physical_cores)
     print(json.dumps(res, indent=2))
 
 
 def cmd_list(args):
-    files = sorted(config.models_dir().glob("*.gguf"))
+    files = sorted(p for p in config.models_dir().glob("*.gguf") if ".imatrix." not in p.name)
     active = config.load_state().get("active", {}).get("path")
     if not files:
         print("No models downloaded yet.")
     for f in files:
         mark = "*" if str(f) == active else " "
-        print(f"{mark} {f.name:<55} {f.stat().st_size / 1024 ** 3:6.2f} GB")
+        print(f"{mark} {f.name:<60} {f.stat().st_size / 1024 ** 3:6.2f} GB")
 
 
 # ------------------------------------------------------------------ parser
@@ -249,35 +517,56 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--version", action="version", version=f"tlav {__version__}")
     sub = p.add_subparsers(dest="cmd", required=True)
 
+    def plan_opts(s, simulate=False):
+        s.add_argument("--task", choices=["chat", "code"], default="chat")
+        s.add_argument("--min-tps", type=float, default=2.5, help="slowest acceptable tokens/second")
+        s.add_argument("--aggressive", action="store_true", help="allow Q3_K_M compression to fit bigger models")
+        s.add_argument("--max-quality", action="store_true",
+                       help="only near-lossless compression (Q6_K/Q8_0, <0.5%% measured change)")
+        s.add_argument("--kv", choices=["q8_0", "f16"], default=planner.DEFAULT_KV,
+                       help="context cache precision (q8_0 halves its memory)")
+        s.add_argument("--cluster", action="store_true", help="also use saved `tlav worker` computers")
+        s.add_argument("--no-draft", action="store_true", help="disable speculative decoding")
+        if simulate:
+            g = s.add_argument_group("simulate machines (repeat --ram for a cluster: --ram 16 --ram 16)")
+            g.add_argument("--ram", type=float, action="append", help="RAM in GB")
+            g.add_argument("--cores", type=int, default=4)
+            g.add_argument("--simd", default="avx2", choices=["baseline", "avx", "avx2", "avx512f", "neon"])
+            g.add_argument("--gpu", default="none", choices=["none", "cuda", "metal"])
+            g.add_argument("--vram", type=float, default=0.0)
+            g.add_argument("--bandwidth", type=float, help="usable GB/s (default 16, dual-channel DDR3)")
+
+    def run_opts(s):
+        s.add_argument("--host", default="127.0.0.1", help="0.0.0.0 to use it from other devices on your network")
+        s.add_argument("--port", type=int, default=8080)
+        s.add_argument("--no-browser", action="store_true")
+        s.add_argument("--detach", action="store_true", help="run in the background")
+        s.add_argument("--low-ram", action="store_true", help="smaller buffers, never lock memory")
+
     s = sub.add_parser("doctor", help="detect hardware and show what Tlav sees")
     s.add_argument("--json", action="store_true")
     s.set_defaults(func=cmd_doctor)
 
     s = sub.add_parser("bench", help="benchmark memory bandwidth (and real tokens/s with --real)")
-    s.add_argument("--real", action="store_true", help="run llama-bench on a model")
+    s.add_argument("--real", action="store_true", help="run llama-bench on a model and calibrate estimates")
     s.add_argument("--model", help="GGUF file for --real")
     s.set_defaults(func=cmd_bench)
 
     s = sub.add_parser("models", help="show the model catalog and compression levels")
+    s.add_argument("--update", action="store_true", help="download the latest catalog")
     s.set_defaults(func=cmd_models)
 
-    def plan_opts(s):
-        s.add_argument("--task", choices=["chat", "code"], default="chat")
-        s.add_argument("--min-tps", type=float, default=2.5, help="slowest acceptable tokens/second")
-        s.add_argument("--aggressive", action="store_true", help="allow Q3_K_M compression to fit bigger models")
-
-    s = sub.add_parser("recommend", help="rank models for this (or a simulated) machine")
-    plan_opts(s)
+    s = sub.add_parser("recommend", help="rank models for this machine, a cluster, or a simulated setup")
+    plan_opts(s, simulate=True)
     s.add_argument("--top", type=int, default=5)
     s.add_argument("--json", action="store_true")
-    g = s.add_argument_group("simulate another machine")
-    g.add_argument("--ram", type=float, help="RAM in GB")
-    g.add_argument("--cores", type=int, default=4)
-    g.add_argument("--simd", default="avx2", choices=["baseline", "avx", "avx2", "avx512f", "neon"])
-    g.add_argument("--gpu", default="none", choices=["none", "cuda", "metal"])
-    g.add_argument("--vram", type=float, default=0.0)
-    g.add_argument("--bandwidth", type=float, help="usable GB/s (default 16, dual-channel DDR3)")
     s.set_defaults(func=cmd_recommend)
+
+    s = sub.add_parser("search", help="find GGUF models on Hugging Face that fit this machine")
+    s.add_argument("query")
+    plan_opts(s, simulate=True)
+    s.add_argument("--top", type=int, default=10)
+    s.set_defaults(func=cmd_search)
 
     s = sub.add_parser("install-runtime", help="install llama.cpp tuned for this CPU")
     s.add_argument("--source", action="store_true", help="always build from source")
@@ -286,39 +575,78 @@ def build_parser() -> argparse.ArgumentParser:
 
     s = sub.add_parser("setup", help="do everything: detect, benchmark, pick, compress, run")
     plan_opts(s)
-    s.add_argument("--model", help="catalog id to force (see `tlav models`)")
-    s.add_argument("--quant", choices=[q.name for q in catalog.QUANTS[1:]])
+    run_opts(s)
+    src = s.add_mutually_exclusive_group()
+    src.add_argument("--model", help="catalog id to force (see `tlav models`)")
+    src.add_argument("--hf", help="any Hugging Face GGUF repo, e.g. bartowski/Qwen_Qwen3-8B-GGUF")
+    s.add_argument("--quant", help="force a compression level, e.g. Q5_K_M")
     s.add_argument("--local-compress", action="store_true",
                    help="compress on this machine instead of downloading a pre-compressed file")
+    s.add_argument("--kv-check", action="store_true", help="measure the context-cache quality impact first")
     s.add_argument("--skip-bench", action="store_true")
     s.add_argument("--yes", "-y", action="store_true")
     s.add_argument("--no-run", action="store_true")
-    s.add_argument("--no-browser", action="store_true")
-    s.add_argument("--host", default="127.0.0.1", help="0.0.0.0 to use it from other devices on your network")
-    s.add_argument("--port", type=int, default=8080)
     s.set_defaults(func=cmd_setup)
 
     s = sub.add_parser("compress", help="compress (quantize) a model and verify its quality")
-    src = s.add_mutually_exclusive_group(required=True)
-    src.add_argument("--model", help="catalog id")
-    src.add_argument("--file", help="your own .gguf file (F16/BF16/Q8_0)")
+    srcg = s.add_mutually_exclusive_group(required=True)
+    srcg.add_argument("--model", help="catalog id")
+    srcg.add_argument("--file", help="your own .gguf file (F16/BF16/Q8_0)")
     s.add_argument("--to", choices=[q.name for q in catalog.QUANTS[1:]])
     s.add_argument("--fit", action="store_true", help="pick the least compression that fits this machine")
     s.add_argument("--no-verify", action="store_true")
+    s.add_argument("--no-imatrix", action="store_true", help="skip importance-matrix compression")
+    s.add_argument("--kv-check", action="store_true", help="also test a compressed context cache")
     s.add_argument("--tolerance", type=float, default=3.0, help="max %% perplexity increase allowed")
     s.set_defaults(func=cmd_compress)
 
     s = sub.add_parser("run", help="start the local AI server + web chat")
     s.add_argument("--model", help="run a specific .gguf instead of the set-up one")
-    s.add_argument("--host", default="127.0.0.1")
-    s.add_argument("--port", type=int, default=8080)
-    s.add_argument("--no-browser", action="store_true")
+    s.add_argument("--cluster", action="store_true", help="use saved workers (with --model)")
+    s.add_argument("--force-split", action="store_true",
+                   help="with --cluster: split across machines even if the model fits here")
+    s.add_argument("--kv", choices=["q8_0", "f16"], default=planner.DEFAULT_KV)
+    s.add_argument("--no-draft", action="store_true")
+    s.add_argument("--foreground", action="store_true", help=argparse.SUPPRESS)  # default; used by services
+    run_opts(s)
     s.set_defaults(func=cmd_run)
+
+    s = sub.add_parser("status", help="is Tlav running, with what, using how much memory")
+    s.add_argument("--json", action="store_true")
+    s.set_defaults(func=cmd_status)
+
+    s = sub.add_parser("stop", help="stop a background server")
+    s.set_defaults(func=cmd_stop)
 
     s = sub.add_parser("chat", help="chat in the terminal with a running server")
     s.add_argument("--url")
     s.add_argument("--system", help="system prompt")
     s.set_defaults(func=cmd_chat)
+
+    s = sub.add_parser("worker", help="share this PC's RAM/CPU with a main Tlav computer (cluster)")
+    s.add_argument("--host", help="interface to listen on (default: this PC's LAN address)")
+    s.add_argument("--port", type=int, default=cluster.RPC_PORT)
+    s.add_argument("--discovery-port", type=int, default=cluster.DISCOVERY_PORT)
+    s.add_argument("--token", help="only answer scans that present this shared word")
+    s.add_argument("--no-cache", action="store_true", help="don't keep received weights on disk")
+    s.add_argument("--threads", type=int)
+    s.add_argument("--mem", type=int, help="limit shared memory, in MB")
+    s.set_defaults(func=cmd_worker)
+
+    s = sub.add_parser("cluster", help="manage the computers that work together")
+    s.add_argument("action", choices=["scan", "add", "remove", "list", "clear"], nargs="?", default="list")
+    s.add_argument("address", nargs="?", help="IP[:PORT] for add/remove")
+    s.add_argument("--token")
+    s.add_argument("--timeout", type=float, default=2.0)
+    s.add_argument("--discovery-port", type=int, default=cluster.DISCOVERY_PORT)
+    s.set_defaults(func=cmd_cluster)
+
+    s = sub.add_parser("service", help="start Tlav automatically at login (always-on AI box)")
+    s.add_argument("action", choices=["install", "uninstall"])
+    s.add_argument("--worker", action="store_true", help="run as a cluster worker instead of the server")
+    s.add_argument("--host", default="0.0.0.0")
+    s.add_argument("--port", type=int, default=8080)
+    s.set_defaults(func=cmd_service)
 
     s = sub.add_parser("list", help="list downloaded models")
     s.set_defaults(func=cmd_list)
@@ -329,8 +657,8 @@ def main(argv=None):
     args = build_parser().parse_args(argv)
     try:
         args.func(args)
-    except runtime.RuntimeMissing as e:
-        sys.exit(str(e))
+    except (runtime.RuntimeMissing, ConnectionError, KeyError) as e:
+        sys.exit(str(e).strip("'\""))
     except KeyboardInterrupt:
         sys.exit(130)
 
