@@ -232,26 +232,11 @@ input[type=range]::-moz-range-thumb { width: 18px; height: 18px; background: var
 .device button small { font-size: 12px; opacity: .75; }
 .device button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
 .chatwrap { grid-column: 6 / span 7; min-width: 0; display: flex; flex-direction: column; }
-.chatbox { --ink: #eef3e8; --muted: #a9b8a3; --line: #2c4433; flex: 1; display: flex; flex-direction: column; min-height: 440px; background: var(--night); color: var(--ink); }
-.cbar { display: flex; align-items: center; gap: 10px; padding: 14px 18px; border-bottom: 1px solid var(--line); font: 12px var(--mono); color: var(--muted); }
-.cbar .logo { width: 10px; height: 10px; background: var(--pixel); }
-.cbar #dModel { color: var(--ink); }
-.cbar em { margin-left: auto; font-style: normal; display: inline-flex; align-items: center; gap: 7px; }
-.cbar em::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: #7bd88f; }
-.chatbox .chatlog { flex: 1; align-content: start; padding: clamp(18px, 3vw, 28px); gap: 14px; }
-.chatbox .msg { font-size: 16px; }
-.chatbox .msg.me { background: var(--pixel); color: var(--night); font-weight: 500; }
-.chatbox .msg.ai { background: color-mix(in srgb, var(--night) 82%, #ffffff); color: var(--ink); max-width: 88%; }
-.cstats { display: grid; grid-template-columns: repeat(3, auto) minmax(0, 1fr) auto; gap: 22px; align-items: center; padding: 14px 18px; border-top: 1px solid var(--line); }
-.cstats div { display: grid; gap: 1px; }
-.cstats b { font: 600 22px/1 var(--display); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
-.cstats div > span { font-size: 12px; color: var(--muted); }
-.cstats #dTps { color: var(--pixel); }
-.speedo { display: grid !important; grid-template-columns: repeat(24, minmax(0, 1fr)); gap: 3px; }
-.speedo i { aspect-ratio: 1; background: var(--line); transition: background-color .2s; }
-.speedo i.on { background: var(--pixel); }
-.replay { padding: 8px 12px; border: 1px solid var(--line); background: transparent; color: var(--ink); font: 500 13px var(--sans); cursor: pointer; }
-.replay:hover { border-color: var(--ink); }
+.chatbox { flex: 1; display: flex; flex-direction: column; min-height: 420px; background: #fbfcf9; box-shadow: 0 0 0 1px var(--line); }
+.chatbox .chatlog { flex: 1; align-content: end; padding: clamp(18px, 3vw, 30px); }
+.chatbox .msg.ai { background: var(--bg); }
+.chatbox .foot { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 12px 16px; border-top: 1px solid var(--line); font: 12px var(--mono); color: var(--muted); }
+.chatbox .foot b { color: var(--ink); font-weight: 500; }
 .fine { margin-top: 12px; font-size: 13px; color: var(--muted); }
 
 /* ---------- cluster ---------- */
@@ -328,13 +313,11 @@ footer a:hover { color: var(--ink); }
   .prompts, .chatwrap { grid-column: 1 / -1; }
   .final-intro, .isteps { grid-column: 1 / -1; }
   .isteps { margin-top: 24px; }
-  .cstats { grid-template-columns: repeat(3, auto) minmax(0, 1fr); }
-  .replay { grid-column: 1 / -1; justify-self: start; }
   .wsteps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .field { width: 100%; height: 100%; }
 }
 @media (max-width: 720px) {
-  .copy, .replay, .device button { min-height: 44px; }
+  .copy, .device button { min-height: 44px; }
   .copy { padding-inline: 14px; }
   .links, .nav .btn { display: none; }
   .menu-btn { display: inline-grid; place-items: center; }
@@ -346,8 +329,6 @@ footer a:hover { color: var(--ink); }
   .cells { grid-template-columns: repeat(16, minmax(0, 1fr)); }
   .wsteps { grid-template-columns: minmax(0, 1fr); }
   .msg { max-width: 92%; font-size: 14px; }
-  .cstats { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
-  .speedo { grid-column: 1 / -1; }
   .layers { grid-template-columns: repeat(24, minmax(0, 1fr)); }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -492,15 +473,8 @@ footer a:hover { color: var(--ink); }
         </div>
         <div class="chatwrap">
           <div class="chatbox">
-            <div class="cbar"><span class="logo" aria-hidden="true"></span><span id="dModel">Qwen3 8B · Q4_K_M</span><em>offline</em></div>
             <div class="chatlog" id="chatlog" aria-live="polite"></div>
-            <div class="cstats">
-              <div><b id="dTps">3.2</b><span>tokens / sec</span></div>
-              <div><b id="dTok">0</b><span>tokens</span></div>
-              <div><b id="dTime">0.0s</b><span>elapsed</span></div>
-              <div class="speedo" id="speedo" aria-hidden="true"></div>
-              <button class="replay" id="replay" type="button">Replay</button>
-            </div>
+            <div class="foot"><span id="dModel">Qwen3 8B · Q4_K_M</span><span><b id="dTps">3.2</b> tokens/s · offline</span></div>
           </div>
           <p class="fine">Example replies, played back at measured speeds for these machines.</p>
         </div>
@@ -784,12 +758,8 @@ footer a:hover { color: var(--ink); }
   const DEVICES = [{ model: "Qwen3 8B · Q4_K_M", tps: 3.2 }, { model: "Qwen2.5 3B · Q4_K_M", tps: 3.3 }];
   const TPW = 1.35;                                   // tokens per word, roughly
   let dev = 0, timer = null, userAsked = false, cur = 0;
-  const chatlog = $("chatlog"), speedo = $("speedo");
-  for (let i = 0; i < 24; i++) speedo.appendChild(document.createElement("i"));
-  const stats = (tps, tok, secs, frac) => {
-    $("dTps").textContent = tps.toFixed(1); $("dTok").textContent = Math.round(tok); $("dTime").textContent = secs.toFixed(1) + "s";
-    [...speedo.children].forEach((c, i) => c.classList.toggle("on", i < Math.round(frac * 24)));
-  };
+  const chatlog = $("chatlog");
+  const stats = (tps) => { $("dTps").textContent = tps.toFixed(1); };
   const finalStats = (k) => { const tok = REPLIES[k].split(/\s+/).length * TPW, tps = DEVICES[dev].tps; stats(tps, tok, tok / tps, 1); };
   const ask = (k) => {
     clearInterval(timer); cur = k;
@@ -818,7 +788,6 @@ footer a:hover { color: var(--ink); }
     userAsked = true; dev = +b.dataset.d; $("device").querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
     ask(cur);
   }));
-  $("replay").addEventListener("click", () => { userAsked = true; ask(cur); });
   // complete at rest: the first reply is shown finished; it streams once when the chat comes into view
   chatlog.innerHTML = `<div class="msg me"></div><div class="msg ai"></div>`;
   chatlog.querySelector(".me").textContent = $("prompts").querySelector('[data-k="0"] span').textContent;
