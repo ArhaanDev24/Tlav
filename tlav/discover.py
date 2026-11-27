@@ -71,6 +71,7 @@ def list_candidates(per_publisher: int = 100, lister=None) -> Dict[str, dict]:
     """base model -> best GGUF repo listing, across the trusted publishers."""
     lister = lister or _get
     found: Dict[str, dict] = {}
+    reached = 0
     for author in QUANTIZERS:
         q = urllib.parse.urlencode({"author": author, "filter": "gguf", "sort": "downloads", "direction": "-1",
                                     "limit": str(per_publisher)})
@@ -79,11 +80,14 @@ def list_candidates(per_publisher: int = 100, lister=None) -> Dict[str, dict]:
                            f"&expand[]=pipeline_tag")
         except Exception:
             continue
+        reached += 1
         for r in repos:
             base = acceptable(r)
             if base and base.lower() not in found:
                 found[base.lower()] = {"repo": r["id"], "base": base, "created": (r.get("createdAt") or "")[:7],
                                        "downloads": r.get("downloads", 0)}
+    if not reached:
+        raise ConnectionError("Hugging Face can't be reached right now")
     # A base (pre-chat) model whose chat version is also listed: keep only the chat version.
     names = {b for b in found}
     for b in list(found):
@@ -172,4 +176,4 @@ def refresh_if_stale(progress=print) -> None:
         n = len(update(progress))
         progress(f"  {n} new models added to the search.")
     except Exception as e:
-        progress(f"  (could not refresh the model list: {str(e)[:60]})")
+        progress(f"  (couldn't check for new models: {str(e)[:60]}; using the ones Tlav already knows)")

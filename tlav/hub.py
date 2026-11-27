@@ -3,6 +3,7 @@
 import json
 import os
 import re
+import shutil
 import sys
 import time
 import urllib.request
@@ -56,11 +57,43 @@ def _fmt(n: float) -> str:
     return f"{n / 1024 ** 3:.2f} GB" if n > 1024 ** 3 else f"{n / 1024 ** 2:.0f} MB"
 
 
-def download(repo: str, filename: str, dest_dir: Optional[Path] = None, quiet: bool = False) -> Path:
+def download(repo: str, filename: str, dest_dir: Optional[Path] = None, quiet: bool = False,
+             retries: int = 4) -> Path:
+    """Download with resume. Flaky connections are retried automatically (continuing where they
+    stopped); a file that isn't a valid model is fetched again."""
     dest_dir = dest_dir or config.models_dir()
     dest = dest_dir / filename
     if dest.exists():
-        return dest
+        if filename.endswith(".gguf") and not _looks_like_gguf(dest):
+            dest.unlink()   # damaged or not a model (e.g. an error page saved by mistake): fetch again
+        else:
+            return dest
+    import socket
+    import urllib.error
+    for attempt in range(retries + 1):
+        try:
+            return _download_once(repo, filename, dest, quiet)
+        except urllib.error.HTTPError:
+            raise                      # missing/private file: retrying won't help
+        except (urllib.error.URLError, socket.timeout, TimeoutError, ConnectionError, IOError) as e:
+            if attempt == retries or getattr(e, "errno", None) == 28:   # 28 = disk full
+                raise
+            wait = 2 ** (attempt + 1)
+            if not quiet:
+                sys.stderr.write(f"\n  connection dropped ({str(e)[:60]}); continuing in {wait}s...\n")
+            time.sleep(wait)
+    return dest
+
+
+def _looks_like_gguf(path: Path) -> bool:
+    try:
+        with open(path, "rb") as f:
+            return f.read(4) == b"GGUF" and path.stat().st_size > 1024 * 1024
+    except OSError:
+        return False
+
+
+def _download_once(repo: str, filename: str, dest: Path, quiet: bool) -> Path:
     part = dest.with_suffix(dest.suffix + ".part")
     have = part.stat().st_size if part.exists() else 0
     req = _request(f"{HF}/{repo}/resolve/main/{filename}")
@@ -70,6 +103,11 @@ def download(repo: str, filename: str, dest_dir: Optional[Path] = None, quiet: b
         if have and r.status != 206:  # server ignored the range: start over
             have = 0
         total = int(r.headers.get("Content-Length", 0)) + have
+        need = total - have
+        free = shutil.disk_usage(dest.parent).free
+        if need and free < need + 200 * 1024 ** 2:
+            raise OSError(28, f"Not enough disk space for {filename}: it needs {_fmt(need)} more, "
+                              f"only {_fmt(free)} is free. Free some space, or pick a smaller model.")
         mode = "ab" if have else "wb"
         t0, done, last = time.time(), have, 0.0
         tty = sys.stderr.isatty()
