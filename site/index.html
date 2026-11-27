@@ -90,7 +90,7 @@ code { font-family: var(--mono); font-size: .92em; }
 .mobile-menu a { padding: 16px 0; font-size: 22px; letter-spacing: -0.02em; text-decoration: none; border-bottom: 1px solid var(--line); }
 
 /* ---------- hero ---------- */
-.hero { --hp: 0; --ink: #eef3e8; --muted: #a9b8a3; --line: #2c4433; color: var(--ink); background: var(--night); position: relative; overflow: hidden; min-height: min(calc(100svh - 68px - env(safe-area-inset-top, 0px)), 760px); display: flex; flex-direction: column; justify-content: center; padding-block: clamp(56px, 8vw, 110px) clamp(90px, 10vw, 140px); }
+.hero { --hp: 0; --ink: #eef3e8; --muted: #a9b8a3; --line: #2c4433; color: var(--ink); background: var(--night); position: relative; overflow: hidden; min-height: min(calc(100svh - 68px - env(safe-area-inset-top, 0px)), 980px); --sc: clamp(130px, 13vw, 190px); display: flex; flex-direction: column; justify-content: center; padding-block: clamp(56px, 8vw, 110px) clamp(90px, 10vw, 140px); }
 .field { position: absolute; inset: 0; cursor: crosshair; }
 .field canvas { width: 100%; height: 100%; display: block; -webkit-mask-image: linear-gradient(90deg, transparent 34%, #000 60%); mask-image: linear-gradient(90deg, transparent 34%, #000 60%); }
 @media (max-width: 720px) { .field canvas { -webkit-mask-image: linear-gradient(180deg, transparent 48%, #000 78%); mask-image: linear-gradient(180deg, transparent 48%, #000 78%); } }
@@ -122,7 +122,7 @@ code { font-family: var(--mono); font-size: .92em; }
 .trust li::before { content: ""; width: 5px; height: 5px; background: var(--pixel); }
 .js .hero .trust { animation: fade 1.1s var(--ease) 1.05s both; }
 /* hero terminal: Tlav's real flow, played once */
-.term { margin: 0; align-self: center; min-width: 0; pointer-events: auto; background: #172a1d; box-shadow: 0 0 0 1px #34503b; transform: translateY(calc(var(--hp) * -40px)); }
+.term { margin: calc(var(--sc) + 22px) 0 0; align-self: center; min-width: 0; pointer-events: auto; background: #172a1d; box-shadow: 0 0 0 1px #34503b; transform: translateY(calc(var(--hp) * -40px)); }
 .js .term { animation: fade 1s var(--ease) .5s both; }
 .term-bar { display: flex; align-items: center; gap: 10px; padding: 11px 16px; border-bottom: 1px solid #2b4433; font: 12px var(--mono); color: var(--muted); }
 .term-bar svg { width: 12px; height: 12px; }
@@ -133,7 +133,7 @@ code { font-family: var(--mono); font-size: .92em; }
 .term-bar .dots i { width: 5px; height: 5px; background: #34503b; transition: background-color .3s; }
 .term-bar .dots i.on { background: var(--pixel); }
 /* the pixel sculpture sits on the terminal's top-right corner */
-.sculpt { --s: clamp(130px, 13vw, 190px); position: absolute; z-index: 1; width: var(--s); height: var(--s); right: 18px; top: calc(var(--s) * -1 - 22px); cursor: pointer; touch-action: pan-y; }
+.sculpt { --s: var(--sc); position: absolute; z-index: 1; width: var(--s); height: var(--s); right: 18px; top: calc(var(--s) * -1 - 22px); cursor: pointer; touch-action: pan-y; }
 .term-body { padding: 16px 18px 18px; font: 13px/1.75 var(--mono); color: #dfe7d8; white-space: pre-wrap; overflow-wrap: anywhere; }
 .term-body .l { display: block; min-height: 1.75em; }
 .term-body .dim { color: var(--muted); }
@@ -390,6 +390,9 @@ footer a:hover { color: var(--ink); }
   .isteps { margin-top: 24px; }
   .wsteps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .field { width: 100%; height: 100%; }
+  .hero .wrap { grid-template-columns: minmax(0, 1fr); }
+  .hero { min-height: 0; padding-block: 64px 120px; }
+  .hero h1 { font-size: clamp(56px, 11vw, 96px); }
 }
 @media (max-width: 720px) {
   .copy, .device button { min-height: 44px; }
@@ -398,8 +401,8 @@ footer a:hover { color: var(--ink); }
   .menu-btn { display: inline-grid; place-items: center; }
   .hero .wrap { grid-template-columns: minmax(0, 1fr); }
   .term-body { font-size: 11.5px; padding: 14px; }
-  .term { margin-top: 158px; }
-  .sculpt { --s: 124px; right: 10px; }
+  .hero { --sc: 124px; }
+  .sculpt { right: 10px; }
   .term-bar > span[aria-hidden] { display: none; }
   .hero { min-height: 0; padding-block: 56px 110px; }
   .hero h1 { font-size: 15vw; }
