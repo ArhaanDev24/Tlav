@@ -72,3 +72,37 @@ def test_damaged_download_is_fetched_again(tmp_path, monkeypatch):
 def test_port_validation():
     with pytest.raises(SystemExit):
         cli.build_parser().parse_args(["worker", "--port", "99999"])
+
+
+def test_local_model_file_matches_name_and_quant(tmp_path, monkeypatch):
+    from tlav import catalog, cli, config, hardware, planner
+    monkeypatch.setenv("TLAV_HOME", str(tmp_path))
+    models = config.models_dir()
+    blob = b"GGUF" + b"\0" * (2 * 1024 * 1024)
+    for name in ("Qwen_Qwen3.5-0.8B-Q8_0.gguf", "Qwen_Qwen3.5-9B-Q4_K_M.gguf", "Qwen_Qwen3.5-2B-Q8_0.gguf.part"):
+        (models / name).write_bytes(blob)
+    node = planner.Node(hardware.simulated(16), 16.0)
+    small = planner.evaluate_nodes(catalog.get("qwen3.5-0.8b"), catalog.QUANT_BY_NAME["Q8_0"], [node])
+    nine = planner.evaluate_nodes(catalog.get("qwen3.5-9b"), catalog.QUANT_BY_NAME["Q4_K_M"], [node])
+    two = planner.evaluate_nodes(catalog.get("qwen3.5-2b"), catalog.QUANT_BY_NAME["Q8_0"], [node])
+    assert cli._local_model_file(small).name == "Qwen_Qwen3.5-0.8B-Q8_0.gguf"
+    assert cli._local_model_file(nine).name == "Qwen_Qwen3.5-9B-Q4_K_M.gguf"
+    assert cli._local_model_file(two) is None                       # only a partial download
+    other = planner.evaluate_nodes(catalog.get("qwen3.5-9b"), catalog.QUANT_BY_NAME["Q8_0"], [node])
+    assert cli._local_model_file(other) is None                     # same model, different quant
+
+
+def test_status_line_follows_resize(capsys, monkeypatch):
+    import os
+    from tlav import chat
+    m = chat.Mark(enabled=True, interval=10)
+    m.rows, m.width = 30, 100
+    m.start()
+    m.count(); m.write("Hello ")
+    monkeypatch.setattr(chat.shutil, "get_terminal_size", lambda fallback=None: os.terminal_size((120, 42)))
+    m._on_resize()
+    m.stop()
+    out = capsys.readouterr().out
+    assert "\x1b[30;1H\x1b[2K\x1b[r" in out          # old status row wiped, old region released
+    assert "\x1b7\x1b[1;41r\x1b8" in out             # new last row reserved
+    assert (m.rows, m.width) == (42, 120)
