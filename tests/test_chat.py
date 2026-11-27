@@ -116,3 +116,21 @@ def test_reasoning_counts_on_status_line(capsys):
     m.stop()
     out = capsys.readouterr().out
     assert "thinking, 2 tokens" in out and "let me think" not in out
+
+
+def test_markdown_shown_as_styles(capsys):
+    import re
+    m = chat.Mark(enabled=True, interval=10)
+    m.width = 60
+    m.start()
+    m.write("## Tips\n* use **bold** and `code` here\nprice 2*3 = 6")
+    m.stop()
+    out = capsys.readouterr().out.split("Tlav", 1)[-1]
+    assert "\x1b[1mbold" in out and "\x1b[38;5;180mcode" in out      # styled, not symbols
+    plain = re.sub(r"\x1b\[[0-9;]*[mK]", "", out)
+    vis = []
+    for ch in plain:
+        vis.pop() if ch == "\b" else vis.append(ch)
+    text = "".join(vis)
+    assert "**" not in text and "`" not in text and "##" not in text
+    assert "• use bold and code here" in text and "2*3 = 6" in text  # bullets and lone stars kept readable

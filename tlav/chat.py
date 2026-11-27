@@ -99,6 +99,8 @@ class Mark:
         self.style = None
         self.width = max(20, shutil.get_terminal_size((80, 24)).columns)
         self.thought_chunks = 0
+        self.markdown = True     # show **bold**, `code` and headings as styles, not symbols
+        self.bold = self.code = self.heading = self.star = False
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._run, daemon=True) if enabled else None
 
@@ -147,6 +149,17 @@ class Mark:
         if self._thread:
             self._thread.start()
 
+    # Markdown inside a word is kept as invisible markers until the word is printed, so the
+    # wrapping math only counts letters people actually see.
+    MARKS = {"\x01": "\033[1m", "\x02": "\033[22m", "\x03": "\033[38;5;180m", "\x04": "\033[39m"}
+
+    @classmethod
+    def _visible(cls, s: str) -> str:
+        return "".join(ch for ch in s if ch not in cls.MARKS)
+
+    def _ansi(self, s: str) -> str:
+        return "".join(self.MARKS.get(ch, ch) for ch in s)
+
     def _word_out(self) -> str:
         """Print the pending word, moving to a new indented line first if it doesn't fit."""
         w, self.word = self.word, ""
@@ -154,15 +167,19 @@ class Mark:
             return ""
         limit = self.limit
         out = []
-        if self.col + len(w) > limit and self.col > 2:
+        n = len(self._visible(w))
+        if self.col + n > limit and self.col > 2:
             out.append("\n  ")
             self.col = 2
-        while len(w) > limit - self.col:   # a word longer than a whole line
-            cut = limit - self.col
-            out.append(self._paint(w[:cut]) + "\n  ")
-            w, self.col = w[cut:], 2
-        out.append(self._paint(w))
-        self.col += len(w)
+        if n > limit - self.col:            # a word longer than a whole line: cut it (plain)
+            w = self._visible(w)
+            while len(w) > limit - self.col:
+                cut = limit - self.col
+                out.append(self._paint(w[:cut]) + "\n  ")
+                w, self.col = w[cut:], 2
+            n = len(w)
+        out.append(self._paint(self._ansi(w)))
+        self.col += n
         return "".join(out)
 
     @property
@@ -179,10 +196,30 @@ class Mark:
         Letters wait in `word` until the word ends, so a word is never split."""
         out = []
         for ch in text:
-            if ch == "\n":
+            if self.star:                   # a lone '*' before this character
+                self.star = False
+                if ch == "*":               # '**' toggles bold
+                    self.bold = not self.bold
+                    self.word += "\x01" if self.bold else "\x02"
+                    continue
+                at_line_start = not self.word and self.col <= 2
+                self.word += "•" if (ch == " " and at_line_start) else "*"
+            if ch == "*" and self.markdown:
+                self.star = True
+            elif ch == "`" and self.markdown:
+                self.code = not self.code
+                self.word += "\x03" if self.code else "\x04"
+            elif ch == "\n":
+                if self.bold or self.code or self.heading:     # markdown never spans lines
+                    self.word += ("\x02" if self.bold or self.heading else "") + ("\x04" if self.code else "")
+                    self.bold = self.code = self.heading = False
                 out.append(self._word_out() + "\n")
                 self.col = 0
             elif ch == " ":
+                if (self.markdown and self.word and self.col <= 2 and len(self.word) <= 6
+                        and set(self.word) == {"#"}):           # '## Heading' -> a bold line
+                    self.word, self.heading = "\x01", True
+                    continue
                 out.append(self._word_out())
                 if self.col < self.limit:
                     out.append(" ")
@@ -218,7 +255,10 @@ class Mark:
             self._thread.join(timeout=1)
         with self.lock:
             if self.writing:
-                sys.stdout.write("\b \b" + self._word_out())
+                if self.star:
+                    self.word += "*"
+                    self.star = False
+                sys.stdout.write("\b \b" + self._word_out() + ("\033[0m" if self.bold or self.code or self.heading else ""))
             else:
                 sys.stdout.write("\r\033[K")
             sys.stdout.flush()
@@ -584,13 +624,14 @@ class Chat:
 
     # -- loop
     def read(self) -> Optional[str]:
-        # \001/\002 tell readline the colour codes take no space, or the prompt shows them raw
-        line = input("\001\033[38;5;209m\002› \001\033[0m\002" if _COLOR else "› ")
+        # \001/\002 mark the colour codes as invisible for readline, and the reset must come before
+        # the final space: readline drops a code at the very end, which left typed text orange.
+        line = input("\001\033[38;5;209m\002›\001\033[0m\002 " if _COLOR else "› ")
         if line.strip() != '"""':
             return line.strip()
         lines = []
         while True:
-            more = input(dim("· "))
+            more = input("\001\033[2m\002·\001\033[0m\002 " if _COLOR else "· ")
             if more.strip() == '"""':
                 return "\n".join(lines).strip()
             lines.append(more)
@@ -671,7 +712,15 @@ def default_think(info: Dict) -> bool:
 def file_info(path: str, ctx: Optional[int] = None, est_tps: Optional[float] = None) -> Dict:
     """Header details for any GGUF file (used when the running model isn't the set-up one)."""
     from . import gguf
-    info = {"model": Path(path).stem, "ctx": ctx, "est_tps": est_tps, "where": "this PC"}
+    stem = Path(path).stem
+    m = re.match(r"(.+?)[-.](I?Q\d[A-Z0-9_]*|BF16|F16|FIT[0-9.]*G?)(?:[-.].*)?$", stem, re.I)
+    name, quant = (m.group(1), m.group(2).upper()) if m else (stem, "")
+    if "_" in name:                      # publisher prefix: Qwen_Qwen3.5-0.8B -> Qwen3.5-0.8B
+        head, rest = name.split("_", 1)
+        if rest.lower().startswith(head.lower()) or (head.islower() and head.isalpha()):
+            name = rest                  # ...and google_gemma-3-1b -> gemma-3-1b
+    name = name.replace("_", " ").replace("-", " ")
+    info = {"model": name, "quant": quant, "ctx": ctx, "est_tps": est_tps, "where": "this PC"}
     try:
         g = gguf.read(path)
         info.update(reasons=g.reasons, params_b=g.n_params / 1e9)
