@@ -8,6 +8,7 @@
 </p>
 
 <p align="center">
+  <a href="https://tlav.online"><img src="https://img.shields.io/badge/website-tlav.online-f26b3a?style=flat-square" alt="Website: tlav.online"></a>
   <a href="https://github.com/ArhaanDev24/Tlavv/actions/workflows/ci.yml"><img src="https://github.com/ArhaanDev24/Tlavv/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <img src="https://img.shields.io/badge/python-3.8%2B-264530?style=flat-square&logo=python&logoColor=white" alt="Python 3.8+">
   <img src="https://img.shields.io/badge/macOS%20%C2%B7%20Linux%20%C2%B7%20Windows-264530?style=flat-square" alt="macOS, Linux, Windows">
