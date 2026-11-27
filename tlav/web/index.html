@@ -8,6 +8,7 @@
 <style>
 /* Tlav web chat. Served by llama-server from ~/.tlav/web; works fully offline (system fonts only). */
 :root {
+  --ease: cubic-bezier(.2, .7, .1, 1);
   --bg: #ffffff; --surface: #ffffff; --ink: #13170f; --muted: #5d6656; --line: #e4e9df;
   --soft: #f1f5ee; --deep: #24402c; --pixel: #f26b3a; --on-deep: #f3f6ee; --danger: #b3412b;
   --fx-a: #7aa886; --fx-b: #f26b3a;   /* background pixels */
@@ -80,22 +81,64 @@ header, form { position: relative; z-index: 2; }
 .error { color: var(--danger); font-size: 14px; }
 .note { max-width: 780px; margin: 0 auto; padding: 0 16px; font-size: 13px; color: var(--muted); }
 
-form { border-top: 1px solid var(--line); background: var(--surface); padding: 12px max(16px, env(safe-area-inset-left)) max(12px, env(safe-area-inset-bottom)); }
-.compose { max-width: 780px; margin: 0 auto; display: flex; gap: 8px; align-items: flex-end; }
-textarea { flex: 1; resize: none; min-height: 46px; max-height: 40vh; padding: 11px 14px; border: 1px solid var(--line); background: var(--bg); border-radius: 0; line-height: 1.45; }
-textarea:focus { border-color: var(--ink); outline: none; }
-.send { min-height: 46px; padding: 0 18px; border: 0; background: var(--ink); color: var(--bg); font-weight: 600; }
-.send.stop { background: var(--pixel); color: #13170f; }
-.send:disabled { opacity: .5; cursor: default; }
-.hint { max-width: 780px; margin: 6px auto 0; font-size: 12px; color: var(--muted); display: flex; justify-content: space-between; gap: 12px; }
+form { background: linear-gradient(to top, var(--bg) 70%, transparent); padding: 10px max(16px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+/* the message box: one card holding the text, a small footer and the send button */
+.compose { position: relative; max-width: 780px; margin: 0 auto; display: flex; align-items: stretch; gap: 0;
+  background: var(--surface); border: 1px solid var(--line); box-shadow: 0 10px 30px -18px rgba(19, 23, 15, .35);
+  transition: border-color .25s, box-shadow .35s, transform .35s var(--ease); }
+.compose:focus-within { border-color: var(--ink); box-shadow: 0 0 0 3px color-mix(in srgb, var(--pixel) 22%, transparent), 0 16px 36px -20px rgba(19, 23, 15, .45); transform: translateY(-1px); }
+.compose::before { content: ""; position: absolute; left: -1px; top: -1px; width: 7px; height: 7px; background: var(--pixel); transform: scale(0); transform-origin: 0 0; transition: transform .35s var(--ease); }
+.compose:focus-within::before { transform: scale(1); }
+.field { position: relative; flex: 1; min-width: 0; display: grid; }
+textarea { grid-area: 1 / 1; resize: none; min-height: 52px; max-height: 40vh; padding: 15px 16px 6px; border: 0; background: transparent; border-radius: 0; line-height: 1.5; outline: none; }
+textarea::placeholder { color: transparent; }
+textarea:focus-visible { outline: none; }   /* the whole card shows focus instead */
+.ghost { grid-area: 1 / 1; pointer-events: none; padding: 15px 16px 6px; line-height: 1.5; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: opacity .45s, transform .45s var(--ease); }
+.ghost.out { opacity: 0; transform: translateY(-6px); }
+.ghost.hide { display: none; }
+.bar { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 0 16px 9px; font-size: 12px; color: var(--muted); }
+.bar kbd { font: 11px var(--mono); padding: 0 4px; border: 1px solid var(--line); border-bottom-width: 2px; background: var(--bg); color: var(--ink); }
+.count { font: 11.5px var(--mono); font-variant-numeric: tabular-nums; opacity: 0; transition: opacity .3s; }
+.count.on { opacity: 1; }
+.send { position: relative; flex: none; width: 64px; margin: 8px; border: 0; display: grid; place-items: center; gap: 2px;
+  background: var(--soft); color: var(--muted); font: 600 11px var(--sans); letter-spacing: .02em; cursor: default;
+  transition: background-color .25s, color .25s, transform .2s var(--ease); }
+.send svg { width: 16px; height: 16px; shape-rendering: crispEdges; }
+.send .stopmark { display: none; }
+.send.ready { background: var(--ink); color: var(--bg); cursor: pointer; }
+.send.ready:hover { transform: translateY(-2px); }
+.send.ready .arrow { animation: nudge 1.6s var(--ease) infinite; }
+@keyframes nudge { 0%, 70%, 100% { transform: none; } 80% { transform: translateY(-2px); } }
+.send.stop { background: var(--pixel); color: #13170f; cursor: pointer; }
+.send.stop .arrow { display: none; }
+.send.stop .stopmark { display: block; }
+.send.stop .stopmark .q { animation: orbit .64s steps(1) infinite; }
+.send:active { transform: scale(.96); }
+.hint { max-width: 780px; margin: 8px auto 0; font-size: 12px; color: var(--muted); display: flex; justify-content: center; gap: 12px; }
+/* messages arrive with a little motion */
+.me { animation: inR .45s var(--ease) both; }
+.ai { animation: inUp .5s var(--ease) both; }
+@keyframes inR { from { opacity: 0; transform: translateX(14px); } to { opacity: 1; transform: none; } }
+@keyframes inUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+.empty .mark rect { animation: pxin .5s var(--ease) both; }
+.empty .mark rect.q { animation-delay: .35s; }
+.empty h1, .empty p { animation: inUp .7s var(--ease) both; }
+.empty h1 { animation-delay: .25s; } .empty p { animation-delay: .4s; }
+@keyframes pxin { from { opacity: 0; transform: scale(.4); } to { opacity: 1; transform: none; } }
+.empty .mark rect { transform-box: fill-box; transform-origin: center; }
 
 @media (max-width: 560px) {
+  .keys { display: none; }
+  .send { width: 52px; margin: 6px; }
   .model { display: none; }
   .me { max-width: 92%; }
   .hint span:last-child { display: none; }
   .btn, .send { min-height: 44px; }
 }
-@media (prefers-reduced-motion: reduce) { .moving .q { animation: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .moving .q, .send .q, .send .arrow, .me, .ai, .empty *, .compose, .ghost { animation: none !important; transition: none !important; }
+}
 </style>
 </head>
 <body>
@@ -113,12 +156,16 @@ textarea:focus { border-color: var(--ink); outline: none; }
   <div class="log" id="log" aria-live="polite"></div>
 </main>
 <form id="form" autocomplete="off">
-  <div class="compose">
-    <label for="input" class="sr" style="position:absolute;left:-9999px">Message</label>
-    <textarea id="input" rows="1" placeholder="Ask anything"></textarea>
-    <button class="send" id="send" type="submit">Send</button>
+  <div class="compose" id="compose">
+    <label for="input" class="sr">Message</label>
+    <div class="field">
+      <textarea id="input" rows="1" placeholder="Ask anything"></textarea>
+      <div class="ghost" id="ghost" aria-hidden="true"></div>
+      <div class="bar"><span class="keys"><kbd>Enter</kbd> to send · <kbd>Shift</kbd>+<kbd>Enter</kbd> new line</span><span class="count" id="count"></span></div>
+    </div>
+    <button class="send" id="send" type="submit" aria-label="Send"><svg class="arrow" viewBox="0 0 7 7" aria-hidden="true"><path fill="currentColor" d="M3 0h1v1H3zM2 1h3v1H2zM1 2h5v1H1zM0 3h7v1H0zM3 4h1v3H3z"/></svg><svg class="stopmark" viewBox="0 0 4 4" aria-hidden="true"><rect width="4" height="4" fill="currentColor"/><rect class="q" x="2" width="2" height="2" fill="#fbfcf9"/></svg><span class="label">Send</span></button>
   </div>
-  <div class="hint"><span id="where">Offline · on this computer</span><span>Enter to send · Shift+Enter for a new line</span></div>
+  <div class="hint"><span id="where">Offline · on this computer</span></div>
 </form>
 <script>
 (() => {
@@ -140,6 +187,8 @@ textarea:focus { border-color: var(--ink); outline: none; }
               verbs: ["Defragmenting the C: drive", "Warming up the CRT", "Counting to 640K", "Tlaving"] };
   const KEY = "tlav.chat.v1";
   let messages = [], busy = null, think = false, temperature = 0.7, fxBusy = false;
+  const ripples = [];   // {x, y, t0, k}: a ring of brighter pixels spreading through the background
+  const fxRipple = (x, y, k) => { if (!matchMedia("(prefers-reduced-motion: reduce)").matches) ripples.push({ x, y, t0: performance.now(), k }); };
   let restartHint = "Type `tlav` in a terminal to start it again.";
 
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(messages)); } catch (e) { /* private mode */ } };
@@ -152,7 +201,14 @@ textarea:focus { border-color: var(--ink); outline: none; }
 
   const empty = () => {
     const d = el("div", "empty");
-    d.appendChild(svg("mark"));
+    const m = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    m.setAttribute("viewBox", "0 0 4 4"); m.setAttribute("class", "mark"); m.setAttribute("aria-hidden", "true");
+    let px = "";
+    for (let y = 0; y < 4; y++) for (let x = 0; x < 4; x++) {
+      const hot = y < 2 && x >= 2;
+      px += `<rect x="${x}" y="${y}" width="1.02" height="1.02" fill="${hot ? "var(--pixel)" : "var(--ink)"}" style="animation-delay:${((x + y) * 45 + (hot ? 260 : 0))}ms"/>`;
+    }
+    m.innerHTML = px; d.appendChild(m);
     d.appendChild(el("h1", null, "Your old computer can think."));
     d.appendChild(el("p", null, `${cfg.model || "Your model"} runs here, offline. Nothing you type leaves ${cfg.where}.`));
     return d;
@@ -333,6 +389,7 @@ textarea:focus { border-color: var(--ink); outline: none; }
     else if (!error && hitLimit && answer) a.meta.appendChild(el("span", null, "reached its length limit; ask it to continue"));
     clearInterval(tick); clearInterval(liveTimer); live.remove();
     busy = null; setBusy(false);
+    { const r = a.wrap.getBoundingClientRect(); if (answer) fxRipple(r.left + 20, r.top + 10, .6); }
     pen.remove(); a.mark.classList.remove("moving"); a.verb.textContent = ""; a.secs.textContent = "";
     if (thinkBox) { thinkBox.firstChild.textContent = `Thought for ${Math.max(1, Math.round(((writeAt || performance.now()) - t0) / 1000))}s`; }
     answer = answer.trim();
@@ -358,13 +415,39 @@ textarea:focus { border-color: var(--ink); outline: none; }
 
   // ---------- controls
   const input = $("input"), btn = $("send");
-  const setBusy = (on) => { fxBusy = on; btn.textContent = on ? "Stop" : "Send"; btn.classList.toggle("stop", on); btn.type = on ? "button" : "submit"; };
+  const label = btn.querySelector(".label");
+  const setBusy = (on) => {
+    fxBusy = on; label.textContent = on ? "Stop" : "Send"; btn.setAttribute("aria-label", on ? "Stop" : "Send");
+    btn.classList.toggle("stop", on); btn.type = on ? "button" : "submit"; refresh();
+  };
   const grow = () => { input.style.height = "auto"; input.style.height = Math.min(input.scrollHeight + 2, innerHeight * .4) + "px"; };
-  input.addEventListener("input", grow);
+  // the box reacts as you type: send lights up, a rough token count appears, examples step aside
+  const ghost = $("ghost"), count = $("count");
+  const refresh = () => {
+    const v = input.value.trim();
+    btn.classList.toggle("ready", !!v && !busy);
+    count.textContent = v ? `~${Math.max(1, Math.ceil(v.length / 3.5))} tokens` : "";
+    count.classList.toggle("on", !!v);
+    ghost.classList.toggle("hide", !!input.value);
+  };
+  const EXAMPLES = ["Ask anything", "Explain RAM like I'm ten", "Give me three dinner ideas", "Summarise a long email", "Why do old computers feel slow?", "Write a short birthday message"];
+  let ex = 0;
+  ghost.textContent = EXAMPLES[0];
+  if (!matchMedia("(prefers-reduced-motion: reduce)").matches) setInterval(() => {
+    if (input.value) return;        // never move while there's text in the box
+    ghost.classList.add("out");
+    setTimeout(() => { ex = (ex + 1) % EXAMPLES.length; ghost.textContent = EXAMPLES[ex]; ghost.classList.remove("out"); }, 450);
+  }, 3600);
+  input.addEventListener("input", () => { grow(); refresh(); });
   input.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); $("form").requestSubmit(); }
   });
-  $("form").addEventListener("submit", (e) => { e.preventDefault(); if (busy) return; const t = input.value; input.value = ""; grow(); send(t); });
+  $("form").addEventListener("submit", (e) => {
+    e.preventDefault(); if (busy || !input.value.trim()) return;
+    const t = input.value; input.value = ""; grow(); refresh();
+    const r = $("compose").getBoundingClientRect(); fxRipple(r.left + r.width / 2, r.top, 1);
+    send(t);
+  });
   btn.addEventListener("click", () => { if (busy) busy.abort(); });
   $("newChat").addEventListener("click", () => { if (busy) busy.abort(); messages = messages.filter((m) => m.role === "system"); save(); render(); input.focus(); });
   $("think").addEventListener("change", (e) => { think = e.target.checked; try { localStorage.setItem("tlav.think", think ? "1" : "0"); } catch (x) {} });
@@ -408,12 +491,18 @@ textarea:focus { border-color: var(--ink); outline: none; }
       const s = t / 1000;
       energy += ((fxBusy ? 1 : 0) - energy) * .03;          // a little brighter while it writes
       g.clearRect(0, 0, W, H);
+      while (ripples.length && t - ripples[0].t0 > 2600) ripples.shift();
       for (const p of cells) {
-        const e = side(p.x);
+        let boost = 0;
+        for (const r of ripples) {                     // ring 70px wide, moving 420px per second
+          const d = Math.hypot(p.x - r.x, p.y - r.y), front = (t - r.t0) * .42, fade = 1 - (t - r.t0) / 2600;
+          boost = Math.max(boost, Math.exp(-((d - front) ** 2) / 2400) * fade * r.k);
+        }
+        const e = Math.max(side(p.x), boost * .5);
         if (e < .02) continue;
         const wave = .5 + .5 * Math.sin(p.x * .008 + p.y * .006 - s * .35);   // slow diagonal wave
         const tw = .5 + .5 * Math.sin(s * p.sp + p.ph);                        // gentle twinkle
-        const v = wave * tw, sz = SZ * (.55 + .6 * v);
+        const v = Math.min(1, wave * tw + boost * .9), sz = SZ * (.55 + .6 * v);
         g.globalAlpha = Math.min(.5, (.07 + .32 * v) * (1 + energy * .7) * e);
         g.fillStyle = p.hot ? colB : colA;
         g.fillRect(Math.round(p.x - sz / 2), Math.round(p.y - sz / 2), Math.round(sz), Math.round(sz));
