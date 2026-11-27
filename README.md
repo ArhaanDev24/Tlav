@@ -1,18 +1,61 @@
-# Tlav
+<p align="center">
+  <img src="docs/media/banner.svg" alt="Tlav. Old PCs. New minds." width="100%">
+</p>
 
-**Turn old PCs and laptops into local AI workstations, alone or together.**
+<p align="center">
+  <b>Turn the old PC in the corner into a private AI, fully offline.</b><br>
+  Tlav finds the best model your computer can really run, shrinks it to fit, and starts a chat. One command.
+</p>
 
-That 2013 iMac in the corner, the ThinkPad in a drawer, the tower under the desk can all run a capable AI assistant, fully offline. And if one isn't enough, Tlav can **combine several old computers** to run a model none of them could hold alone.
+<p align="center">
+  <a href="https://github.com/ArhaanDev24/Tlavv/actions/workflows/ci.yml"><img src="https://github.com/ArhaanDev24/Tlavv/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <img src="https://img.shields.io/badge/python-3.8%2B-264530?style=flat-square&logo=python&logoColor=white" alt="Python 3.8+">
+  <img src="https://img.shields.io/badge/macOS%20%C2%B7%20Linux%20%C2%B7%20Windows-264530?style=flat-square" alt="macOS, Linux, Windows">
+  <img src="https://img.shields.io/badge/runs-100%25%20offline-f26b3a?style=flat-square" alt="Runs 100% offline">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-264530?style=flat-square" alt="MIT license"></a>
+</p>
+
+<p align="center">
+  <a href="#install">Install</a> &nbsp;·&nbsp;
+  <a href="#see-it-work">See it work</a> &nbsp;·&nbsp;
+  <a href="#the-tlav-chat">Chat</a> &nbsp;·&nbsp;
+  <a href="#combine-computers-cluster-mode">Cluster</a> &nbsp;·&nbsp;
+  <a href="#how-tlav-finds-the-best-model">How it picks</a> &nbsp;·&nbsp;
+  <a href="#commands">Commands</a>
+</p>
+
+<br>
+
+<p align="center">
+  <img src="docs/media/setup.gif" alt="A real tlav run: the TLAV welcome box, then it measures the computer, picks Qwen3.5 9B, runs a speed test and asks where to chat" width="860">
+  <br><sub>A real <code>tlav</code> run on a 16 GB, 4-core PC. The one-minute speed test is sped up; nothing else is.</sub>
+</p>
+
+That 2013 iMac in the corner, the ThinkPad in a drawer, the tower under the desk: all of them can run a capable AI assistant, fully offline. And if one isn't enough, Tlav can **combine several old computers** to run a model none of them could hold alone.
 
 ```bash
 tlav
 ```
 
-> **Old PCs. New minds.** · Your old computer isn't dead. It's waiting. · Don't throw it out. Wake it up. · Two old laptops. One bigger brain. · Private AI from the computer you already own.
+## What it does
 
-Website: [`site/index.html`](site/index.html)
+<table>
+  <tr>
+    <td width="33%" valign="top"><img src="docs/media/icons/detect.svg" width="44" alt=""><br><b>Knows your machine</b><br><sub>RAM, cores, AVX/AVX2/AVX-512, GPU and disk, plus a real memory-speed test, which decides how fast a model can talk on a CPU.</sub></td>
+    <td width="33%" valign="top"><img src="docs/media/icons/find.svg" width="44" alt=""><br><b>Finds the best model</b><br><sub>Ranks 50+ models from real AI labs, then checks the top five against the actual files on Hugging Face and tells you why the winner won.</sub></td>
+    <td width="33%" valign="top"><img src="docs/media/icons/shrink.svg" width="44" alt=""><br><b>Shrinks it to fit</b><br><sub>Measured, near-lossless compression, even sized exactly for your RAM, with every result quality-checked against the original.</sub></td>
+  </tr>
+  <tr>
+    <td valign="top"><img src="docs/media/icons/speed.svg" width="44" alt=""><br><b>Makes it faster</b><br><sub>Speculative decoding gives byte-identical answers, faster. One real speed test calibrates every future pick.</sub></td>
+    <td valign="top"><img src="docs/media/icons/chat.svg" width="44" alt=""><br><b>Opens a chat</b><br><sub>Tlav's own terminal chat or web chat, with live tokens/s and an OpenAI-compatible API for other apps.</sub></td>
+    <td valign="top"><img src="docs/media/icons/cluster.svg" width="44" alt=""><br><b>Pools old computers</b><br><sub>Splits one bigger model across several machines on your network, so their memory adds up.</sub></td>
+  </tr>
+</table>
 
-One command. Tlav:
+<details>
+<summary><b>The full pipeline, step by step</b></summary>
+
+<br>
 
 1. **Detects** your hardware: RAM, CPU cores, AVX/AVX2/AVX-512, GPU, disk.
 2. **Benchmarks** memory bandwidth, which decides how fast a model can talk on a CPU, and self-calibrates against real runs.
@@ -22,9 +65,9 @@ One command. Tlav:
 6. **Measures it**: one quick speed test on the installed model; if your PC is slower than expected, Tlav offers a faster pick.
 7. **Opens the Tlav chat** in your terminal. A web chat and an OpenAI-compatible API run too, and it can start at boot as an always-on AI box.
 
-Next time, just type `tlav`: it starts your model and asks where you want to chat, **here in the terminal or in your web browser**. It asks every time, so you can switch whenever you like (`tlav chat` always opens the terminal).
+</details>
 
----
+Next time, just type `tlav`: it starts your model and asks where you want to chat, **here in the terminal or in your web browser**. It asks every time, so you can switch whenever you like (`tlav chat` always opens the terminal).
 
 ## Install
 
@@ -46,6 +89,27 @@ Tlav builds llama.cpp from source with AVX2 on and Metal off (old Mac GPUs are s
 xcode-select --install
 ```
 
+## See it work
+
+Everything below was recorded from real runs: real models, real speeds, no mock-ups.
+
+<table>
+  <tr>
+    <td width="50%" valign="top"><b>Terminal chat</b><br><sub>Old-computer status lines while it warms up, the Tlav square following the words, and live tokens/s on the bottom row.</sub><br><br><img src="docs/media/chat.gif" alt="Tlav terminal chat answering a question at 3.4 tokens per second" width="100%"></td>
+    <td width="50%" valign="top"><b>Web chat</b><br><sub>Served by your own computer, so it works with no internet. A real 3B model answering at 3.8 tokens/s.</sub><br><br><img src="docs/media/web-chat.gif" alt="Tlav web chat streaming an answer with live speed" width="100%"></td>
+  </tr>
+</table>
+
+<table>
+  <tr>
+    <td width="40%" align="center"><img src="docs/media/web-light.png" alt="Web chat, white theme" width="100%"><br><sub>White theme</sub></td>
+    <td width="40%" align="center"><img src="docs/media/web-dark.png" alt="Web chat, dark theme" width="100%"><br><sub>Dark theme</sub></td>
+    <td width="20%" align="center"><img src="docs/media/web-phone.png" alt="Web chat on a phone" width="100%"><br><sub>On a phone</sub></td>
+  </tr>
+</table>
+
+<sub>Prefer video? MP4s of every clip: <a href="docs/media/setup.mp4">setup</a> · <a href="docs/media/chat.mp4">terminal chat</a> · <a href="docs/media/web-chat.mp4">web chat</a> · <a href="docs/media/cluster.mp4">cluster</a>.</sub>
+
 ## What will my machine run?
 
 ```bash
@@ -66,8 +130,6 @@ Typical picks for a 2013 iMac (quad-core Haswell, DDR3-1600):
 | **two 16 GB PCs** | **Qwen3.6 35B-A3B (MoE) @ Q4_K_M, split across both** | ~11 GB each | ~7 tok/s on Ethernet |
 
 `tlav setup --min-tps 5` prefers faster models, and `tlav setup --task code` picks coding models.
-
----
 
 ## The Tlav chat
 
@@ -107,6 +169,11 @@ If the usual port (8080) is taken by another program, Tlav starts on the next fr
 
 ## Combine computers (cluster mode)
 
+<p align="center">
+  <img src="docs/media/cluster.gif" alt="Tlav connecting two workers with an animated link, splitting a model across three computers and chatting" width="860">
+  <br><sub>A real cluster run: two workers join, the model's layers travel to them, and the chat runs across 3 computers.</sub>
+</p>
+
 Yes, you can pool several old computers into one bigger AI machine. Tlav uses llama.cpp's RPC backend to **split the model's layers across machines**, so their RAM adds up.
 
 ```
@@ -137,8 +204,7 @@ If your network blocks discovery, add a worker by address: `tlav cluster add 192
 - **Only the main PC downloads the model.** Workers receive their share over the network and cache it, so the next start is faster.
 - **Security:** a worker accepts work from anyone who can reach it, with no password. Only run it on a home network you trust, never on public Wi-Fi, and never forward its port (50052) on your router. `tlav worker --token WORD` stops accidental joins but is not real security.
 
----
-
+### Watching it connect
 
 While computers connect, and while the model's layers travel to each worker, Tlav draws each link live in the terminal. A packet glides from **this PC** to the worker, then the line settles into a solid connection with its speed:
 
@@ -149,6 +215,7 @@ While computers connect, and while the model's layers travel to each worker, Tla
 Tlav also checks the details that break clusters:
 - **Engine versions:** every computer must run the same AI engine build, so Tlav warns and tells you how to fix it if they differ.
 - **Changed addresses:** if a router hands a worker a new address, Tlav finds it again by its computer name.
+
 ## How Tlav finds the best model
 
 This is Tlav's core job, and it does it like a careful researcher would:
@@ -204,8 +271,6 @@ Every compression Tlav does is compared with the original using **KL divergence*
 
 A bigger model compressed to Q4_K_M almost always beats a smaller model kept at full precision. That trade is what lets Tlav run "a larger, better model" on your machine.
 
----
-
 ## Commands
 
 | Command | What it does |
@@ -252,6 +317,19 @@ For every model × compression level × (one machine or a cluster):
 
 Measured on the test machine: memory 2.7 GB actual vs 3.0 GB planned; speed 52 tok/s actual vs 55 planned.
 
+## The website
+
+Tlav has a one-page website in [`site/`](site/): open `site/index.html` in any browser, no build step.
+
+<p align="center"><img src="docs/media/website.png" alt="The Tlav website hero: Old PCs. New minds." width="860"></p>
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/media/site-fit.png" alt="Website: what can your computer run? A memory slider picks the model" width="100%"></td>
+    <td width="50%"><img src="docs/media/site-cluster.png" alt="Website: two computers, one bigger mind" width="100%"></td>
+  </tr>
+</table>
+
 ## Development
 
 ```bash
@@ -261,6 +339,15 @@ pytest
 
 CI runs the unit tests on Linux, macOS and Windows. It also runs an end-to-end job that builds llama.cpp, compresses and quality-checks a model, serves it, and splits it across a 3-machine cluster, checking that the answers match.
 
+Contributions are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## License
 
-MIT
+MIT. See [LICENSE](LICENSE).
+
+<br>
+
+<p align="center">
+  <img src="docs/media/icons/detect.svg" width="28" alt="">
+  <br><sub><b>Old PCs. New minds.</b> Your old computer isn't dead. It's waiting.</sub>
+</p>
