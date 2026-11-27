@@ -104,7 +104,8 @@ code { font-family: var(--mono); font-size: .92em; }
 .js .hero h1 .ch { animation: rise 1.05s var(--ease) both; animation-delay: calc(var(--c) * 34ms + 80ms); }
 @keyframes rise { from { transform: translateY(108%) rotate(7deg); } }
 .hero h1 .dot { display: inline-block; width: .16em; height: .16em; background: var(--pixel); margin-left: .03em; }
-.js .hero h1 .dot { animation: drop .7s var(--ease) .9s both; }
+.js .hero h1 .dot { animation: drop .7s var(--ease) .9s both, blink 1.1s steps(1) 2.4s infinite; }
+@keyframes blink { 50% { opacity: 0; } }
 @keyframes drop { from { transform: translateY(-1.4em); opacity: 0; } }
 .hero .meta { display: grid; justify-items: start; gap: 26px; margin-top: clamp(28px, 3.4vw, 44px); }
 .hero .lead { max-width: 34ch; font-size: clamp(17px, 1.5vw, 20px); line-height: 1.45; letter-spacing: -0.015em; color: var(--muted); }
@@ -136,6 +137,12 @@ code { font-family: var(--mono); font-size: .92em; }
 .sculpt { --s: var(--sc); position: absolute; z-index: 1; width: var(--s); height: var(--s); right: 18px; top: calc(var(--s) * -1 - 22px); cursor: pointer; touch-action: pan-y; }
 .term-body { padding: 16px 18px 18px; font: 13px/1.75 var(--mono); color: #dfe7d8; white-space: pre-wrap; overflow-wrap: anywhere; }
 .term-body .l { display: block; min-height: 1.75em; }
+.term-body { transition: opacity .45s var(--ease); }
+.term-body.out { opacity: 0; }
+.term-body .live { color: var(--muted); font-variant-numeric: tabular-nums; }
+.term-body .live b { color: var(--pixel); font-weight: 500; }
+.term-bar .mach { transition: opacity .3s; }
+.term-bar .mach.swap { opacity: 0; }
 .term-body .dim { color: var(--muted); }
 .term-body .ok { color: #9fd0a6; }
 .term-body .hl { color: var(--pixel); }
@@ -452,7 +459,7 @@ footer a:hover { color: var(--ink); }
       </div>
       <figure class="term" id="term" aria-label="Tlav in a terminal: it measures a 16 GB machine, checks 51 models, picks Qwen3.5 9B, compresses it from 16.7 to 5.7 GB keeping 97.5% of its quality, and answers a question offline.">
         <canvas class="sculpt" id="morph" role="img" aria-label="Pixels assembling into a chip, an upward arrow and the letters AI"></canvas>
-        <div class="term-bar"><svg class="px" viewBox="0 0 4 4" aria-hidden="true"><rect width="4" height="4" fill="#eef3e8"/><rect x="2" width="2" height="2" fill="var(--pixel)"/></svg><span aria-hidden="true">tlav · 2013 iMac, 16 GB</span><span class="cap"><b id="morphCap">your old hardware</b><span class="dots" aria-hidden="true"><i class="on"></i><i></i><i></i></span></span></div>
+        <div class="term-bar"><svg class="px" viewBox="0 0 4 4" aria-hidden="true"><rect width="4" height="4" fill="#eef3e8"/><rect x="2" width="2" height="2" fill="var(--pixel)"/></svg><span aria-hidden="true" class="mach" id="termMach">tlav · 2013 iMac, 16 GB</span><span class="cap"><b id="morphCap">your old hardware</b><span class="dots" aria-hidden="true"><i class="on"></i><i></i><i></i></span></span></div>
         <div class="term-body" id="termBody" aria-hidden="true"></div>
       </figure>
     </div>
@@ -721,38 +728,63 @@ footer a:hover { color: var(--ink); }
   if (!reduced && "IntersectionObserver" in window) new IntersectionObserver((e) => { mOn = e[0].isIntersecting; if (mOn) requestAnimationFrame(mloop); }).observe(mc);
 
 
-  /* ---------- hero terminal: what `tlav` really does, played once ---------- */
-  const termBody = $("termBody");
-  const TERM = [
-    { cmd: "tlav" },
-    { busy: "Measuring your machine", done: ["16 GB", " · 4 cores"], ms: 900 },
-    { busy: "Checking 51 models", done: ["Qwen3.5 9B", " fits"], ms: 1100 },
-    { busy: "Compressing", done: ["16.7 → 5.7 GB", " · 97.5% kept"], ms: 1000 },
-    { ask: "Terminal or web?", pick: "terminal" },
-    { you: "Why do old computers feel slow?" },
-    { think: ["Spinning up the 5,400 RPM drive", "Counting to 640K"], ms: 1500 },
-    { answer: "Mostly memory. For every word, the model reads its weights from RAM, and older RAM is slow. Tlav picks a model sized so yours keeps up." },
+  /* ---------- hero terminal: what `tlav` really does, on three real kinds of old computer ---------- */
+  const termBody = $("termBody"), termMach = $("termMach");
+  let pulse = () => {};          // set by the pixel field: each written word sends a ripple out of the terminal
+  // Picks and speeds match the "What can your computer run?" tool below (Tlav's planner).
+  const SCENES = [
+    { mach: "2013 iMac, 16 GB", tps: 2.9, steps: [
+      { cmd: "tlav" },
+      { busy: "Measuring your machine", done: ["16 GB", " · 4 cores"], ms: 900 },
+      { busy: "Checking 51 models", done: ["Qwen3.5 9B", " fits"], ms: 1100 },
+      { busy: "Compressing", done: ["16.7 → 5.7 GB", " · 97.5% kept"], ms: 1000 },
+      { ask: "Terminal or web?", pick: "terminal" },
+      { you: "Why do old computers feel slow?" },
+      { think: ["Spinning up the 5,400 RPM drive", "Counting to 640K"], ms: 1500 },
+      { answer: "Mostly memory. For every word, the model reads its weights from RAM, and older RAM is slow. Tlav picks a model sized so yours keeps up." } ] },
+    { mach: "ThinkPad T430, 8 GB", tps: 2.6, steps: [
+      { cmd: "tlav" },
+      { busy: "Measuring your machine", done: ["8 GB", " · 2 cores"], ms: 900 },
+      { busy: "Checking 51 models", done: ["Qwen3 8B", " fits"], ms: 1100 },
+      { busy: "Compressing", done: ["16.4 → 5.0 GB", " · 97.5% kept"], ms: 1000 },
+      { ask: "Terminal or web?", pick: "terminal" },
+      { you: "Write a birthday line for my sister." },
+      { think: ["Rewinding the cassette with a pencil", "Defragmenting the C: drive"], ms: 1500 },
+      { answer: "Happy birthday! May this year bring you as much joy as you bring everyone around you." } ] },
+    { mach: "Netbook, 4 GB", tps: 2.8, steps: [
+      { cmd: "tlav" },
+      { busy: "Measuring your machine", done: ["4 GB", " · 2 cores"], ms: 900 },
+      { busy: "Checking 51 models", done: ["Qwen3 4B", " fits"], ms: 1100 },
+      { busy: "Compressing", done: ["8.0 → 2.5 GB", " · 97.5% kept"], ms: 1000 },
+      { ask: "Terminal or web?", pick: "terminal" },
+      { you: "Is my 4 GB laptop too old for AI?" },
+      { think: ["Blowing on the cartridge", "Waiting for the dial-up tone"], ms: 1500 },
+      { answer: "Not at all. A small model like this one fits in under 3 GB and answers offline, at a steady reading pace." } ] },
   ];
   const tline = (html) => { const l = document.createElement("span"); l.className = "l"; l.innerHTML = html; termBody.appendChild(l); return l; };
   const tesc = (s) => s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]);
   const doneLine = (s) => `<i class="sq"></i>${s.busy}  <span class="ok">${s.done[0]}</span><span class="dim">${s.done[1]}</span>`;
-  const termFinal = () => {
+  const tokensOf = (text) => Math.round(text.split(/\s+/).filter(Boolean).length * 1.3);
+  const liveLine = (n, tps) => `<span class="live"><b>■</b> ${Math.round(n)} token${Math.round(n) === 1 ? "" : "s"} · ${tps.toFixed(1)} tokens/s</span>`;
+  const termFinal = (scene) => {
     termBody.textContent = "";
-    for (const s of TERM) {
+    termMach.textContent = "tlav · " + scene.mach;
+    for (const s of scene.steps) {
       if (s.cmd) tline(`<span class="dim">$</span> <span class="b">${s.cmd}</span>`);
       if (s.busy) tline(doneLine(s));
       if (s.ask) tline(`<span class="dim">${s.ask} ›</span> ${s.pick}`);
       if (s.you) { tline(""); tline(`<span class="hl">›</span> ${tesc(s.you)}`); }
-      if (s.answer) { tline(`<i class="sq"></i><span class="b">Tlav</span>`); tline(tesc(s.answer)); }
+      if (s.answer) { tline(`<i class="sq"></i><span class="b">Tlav</span>`); tline(tesc(s.answer)); tline(liveLine(tokensOf(s.answer), scene.tps)); }
     }
   };
   const twait = (ms) => new Promise((r) => setTimeout(r, ms));
-  const termPlay = async () => {
+  const termPlay = async (scene) => {
     termBody.textContent = "";
-    for (const s of TERM) {
+    morphTo(0);
+    for (const s of scene.steps) {
       if (s.cmd) { const l = tline(`<span class="dim">$</span> <span class="b"></span>`), b = l.lastChild; for (const ch of s.cmd) { b.textContent += ch; await twait(110); } await twait(350); }
       if (s.busy === "Compressing") morphTo(1);
-      if (s.busy) { const l = tline(`<i class="sq go"></i>${s.busy}<span class="dim">…</span>`); await twait(s.ms); l.innerHTML = doneLine(s); await twait(260); }
+      if (s.busy) { const l = tline(`<i class="sq go"></i>${s.busy}<span class="dim">…</span>`); await twait(s.ms); l.innerHTML = doneLine(s); pulse(.5); await twait(260); }
       if (s.ask) { const l = tline(`<span class="dim">${s.ask} ›</span> `); await twait(700); l.insertAdjacentText("beforeend", s.pick); await twait(400); }
       if (s.you) { tline(""); const l = tline(`<span class="hl">›</span> `); for (const ch of s.you) { l.insertAdjacentText("beforeend", ch); await twait(38); } await twait(300); }
       if (s.think) {
@@ -762,16 +794,40 @@ footer a:hover { color: var(--ink); }
       }
       if (s.answer) {
         morphTo(2);
-        const l = tline(""), txt = document.createTextNode(""), pen = document.createElement("i");
+        const l = tline(""), txt = document.createTextNode(""), pen = document.createElement("i"), live = tline("");
         pen.className = "pen"; l.append(txt, pen);
-        for (const w of s.answer.split(/(\s+)/)) { txt.textContent += w; await twait(/\s/.test(w) ? 0 : 95); }
-        pen.remove();
+        // the speed line counts up live, at this machine's real speed (≈1.3 tokens per word)
+        const t0 = performance.now(); let n = 0;
+        const show = () => { live.innerHTML = liveLine(n, n ? n / Math.max(.4, (performance.now() - t0) / 1000) : 0); };
+        show();
+        for (const w of s.answer.split(/(\s+)/)) {
+          txt.textContent += w;
+          if (/\S/.test(w)) { n += 1.3; show(); pulse(.32); await twait(1300 / scene.tps); }
+        }
+        n = tokensOf(s.answer); live.innerHTML = liveLine(n, scene.tps); pen.remove();
       }
     }
   };
-  // Reserve the final height first so nothing below jumps while it types.
-  termFinal();
-  if (!reduced) { termBody.style.minHeight = termBody.offsetHeight + "px"; setTimeout(() => termPlay().then(() => { termBody.style.minHeight = ""; nextMorph = performance.now() + 4200; }), 900); }
+  // Reserve the tallest scene's height first so nothing below jumps while it types.
+  let tallest = 0;
+  for (const sc of SCENES) { termFinal(sc); tallest = Math.max(tallest, termBody.offsetHeight); }
+  termFinal(SCENES[0]);
+  if (!reduced) {
+    termBody.style.minHeight = tallest + "px";
+    const swapMachine = async (sc) => { termMach.classList.add("swap"); await twait(300); termMach.textContent = "tlav · " + sc.mach; termMach.classList.remove("swap"); };
+    (async () => {
+      await twait(900);
+      for (let i = 0; ; i = (i + 1) % SCENES.length) {
+        nextMorph = Infinity;
+        await swapMachine(SCENES[i]);
+        await termPlay(SCENES[i]);
+        nextMorph = performance.now() + 1800;
+        await twait(5200);                        // let people read the answer
+        while (document.hidden) await twait(1000); // don't run the story in a background tab
+        termBody.classList.add("out"); await twait(480); termBody.classList.remove("out");
+      }
+    })();
+  }
 
   /* pixel field */
   const canvas = $("field"), ctx = canvas.getContext("2d");
@@ -790,23 +846,29 @@ footer a:hover { color: var(--ink); }
   const draw = (t) => {
     const T = reduced ? 3 : t / 1000, age = reduced ? 9 : (t - born) / 1000;
     ctx.clearRect(0, 0, W, H);
+    // ripples: rings that grow and fade (from the terminal while it writes, and now and then on their own)
+    const rings = reduced ? [] : waves.map((wv) => { const a = (t - wv.t0) / 1000; return { x: wv.x, y: wv.y, rad: a * 240, k: wv.s * Math.max(0, 1 - a / 2.6) }; });
     for (const c of grid) {
       if (age < c.d * 1.4) continue;  // fades in from the top-right
       const w = .5 + .28 * Math.sin(c.x * .011 + T * .55) + .22 * Math.sin(c.y * .017 - T * .42 + c.x * .004);
       const dm = Math.hypot(c.x - mouse.x, c.y - mouse.y);
       c.heat = dm < 64 ? Math.min(1, c.heat + .06) : c.heat * .94;
-      const v = Math.min(1, w * .8 + c.heat * .28);
+      let boost = 0;
+      for (const r of rings) { const dd = Math.abs(Math.hypot(c.x - r.x, c.y - r.y) - r.rad); if (dd < 28) boost += r.k * (1 - dd / 28); }
+      const v = Math.min(1, w * .8 + c.heat * .28 + boost);
       const sz = 1.4 + v * v * 8;
       ctx.globalAlpha = .22 + .6 * v; ctx.fillStyle = PAL[Math.round(v * 16)];
       ctx.fillRect(Math.round(c.x - sz / 2), Math.round(c.y - sz / 2), Math.round(sz), Math.round(sz));
     }
     ctx.globalAlpha = 1;
   };
-  let nextWave = 0;
+  let nextWave = 0, lastDraw = 0;
   const loop = (t) => {
     if (!running) return;
-    while (waves.length && t - waves[0].t0 > 3000) waves.shift();
-    draw(t); requestAnimationFrame(loop);
+    while (waves.length && t - waves[0].t0 > 2600) waves.shift();
+    if (t > nextWave) { waves.push({ x: W * (.55 + Math.random() * .4), y: H * (.15 + Math.random() * .7), t0: t, s: .28 }); nextWave = t + 2600 + Math.random() * 2400; }
+    if (t - lastDraw > 31) { lastDraw = t; draw(t); }   // ~30 fps is plenty for a slow field, and halves the work
+    requestAnimationFrame(loop);
   };
   build(); draw(reduced ? 0 : performance.now());
   addEventListener("resize", () => { build(); draw(performance.now()); });
@@ -817,6 +879,11 @@ footer a:hover { color: var(--ink); }
   });
   hero.addEventListener("pointerleave", () => (mouse = { x: -999, y: -999 }));
   nextWave = performance.now() + 900;
+  pulse = (s) => {
+    if (reduced || !running || waves.length > 14) return;
+    const r = canvas.getBoundingClientRect(), tr = $("term").getBoundingClientRect();
+    waves.push({ x: tr.left - r.left + tr.width * .5, y: tr.top - r.top + tr.height * .5, t0: performance.now(), s });
+  };
   if (!reduced && "IntersectionObserver" in window) new IntersectionObserver((e) => { running = e[0].isIntersecting; if (running) requestAnimationFrame(loop); }).observe(canvas);
   else draw(0);
 
