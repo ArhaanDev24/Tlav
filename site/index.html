@@ -120,7 +120,7 @@ code { font-family: var(--mono); font-size: .92em; }
 .term-bar .dots i { width: 5px; height: 5px; background: #34503b; transition: background-color .3s; }
 .term-bar .dots i.on { background: var(--pixel); }
 /* the pixel sculpture sits on the terminal's top-right corner */
-.sculpt { --s: clamp(130px, 13vw, 190px); position: absolute; z-index: 1; width: var(--s); height: var(--s); right: 18px; top: calc(var(--s) * -1 + 14px); cursor: pointer; touch-action: pan-y; }
+.sculpt { --s: clamp(130px, 13vw, 190px); position: absolute; z-index: 1; width: var(--s); height: var(--s); right: 18px; top: calc(var(--s) * -1 - 22px); cursor: pointer; touch-action: pan-y; }
 .term-body { padding: 16px 18px 18px; font: 13px/1.75 var(--mono); color: #dfe7d8; white-space: pre-wrap; overflow-wrap: anywhere; }
 .term-body .l { display: block; min-height: 1.75em; }
 .term-body .dim { color: var(--muted); }
@@ -385,7 +385,7 @@ footer a:hover { color: var(--ink); }
   .menu-btn { display: inline-grid; place-items: center; }
   .hero .wrap { grid-template-columns: minmax(0, 1fr); }
   .term-body { font-size: 11.5px; padding: 14px; }
-  .term { margin-top: 118px; }
+  .term { margin-top: 158px; }
   .sculpt { --s: 124px; right: 10px; }
   .term-bar > span[aria-hidden] { display: none; }
   .hero { min-height: 0; padding-block: 56px 110px; }
