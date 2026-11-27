@@ -9,6 +9,8 @@ import json
 import os
 import re
 import shutil
+import signal
+import threading
 import subprocess
 import sys
 import time
@@ -102,6 +104,7 @@ class Mark:
         self.rows = shutil.get_terminal_size((80, 24)).lines
         self.live = True          # live tokens/s on the bottom row while writing
         self.status_on = False
+        self.resized = False
         self.tokens = 0
         self.write_t0 = 0.0
         self.markdown = True     # show **bold**, `code` and headings as styles, not symbols
@@ -141,6 +144,8 @@ class Mark:
         while not self._stop.wait(self.interval):
             with self.lock:
                 self.i += 1
+                if self.resized:
+                    self._on_resize()
                 sys.stdout.write("\b" + self._frame() if self.writing else self._header())
                 if self.status_on and time.time() - last_status >= 1.0:
                     last_status = time.time()
@@ -183,9 +188,27 @@ class Mark:
             return
         sys.stdout.write(self._header())
         sys.stdout.flush()
+        # follow window resizes: the reserved status row and the wrap width depend on the size
+        self._old_winch = None
+        if hasattr(signal, "SIGWINCH") and threading.current_thread() is threading.main_thread():
+            self._old_winch = signal.signal(signal.SIGWINCH, lambda *a: setattr(self, "resized", True))
         if self._thread:
             self._thread.start()
 
+    def _on_resize(self) -> None:
+        """The window changed size: move the status row and re-wrap at the new width."""
+        self.resized = False
+        size = shutil.get_terminal_size((self.width, self.rows))
+        old = self.rows
+        self.width, self.rows = max(20, size.columns), size.lines
+        if self.status_on:
+            # wipe the status where it was, release the old region, reserve the new last row
+            sys.stdout.write(f"\0337\033[{old};1H\033[2K\033[r\0338")
+            if self.rows >= 6:
+                sys.stdout.write(f"\0337\033[1;{self.rows - 1}r\0338")
+                self._draw_status()
+            else:
+                self.status_on = False
     # Markdown inside a word is kept as invisible markers until the word is printed, so the
     # wrapping math only counts letters people actually see.
     MARKS = {"\x01": "\033[1m", "\x02": "\033[22m", "\x03": "\033[38;5;180m", "\x04": "\033[39m"}
@@ -292,6 +315,8 @@ class Mark:
         if not self.on or self._stop.is_set():
             return
         self._stop.set()
+        if getattr(self, "_old_winch", None) is not None and threading.current_thread() is threading.main_thread():
+            signal.signal(signal.SIGWINCH, self._old_winch)
         if self._thread and self._thread.is_alive():
             self._thread.join(timeout=1)
         with self.lock:
