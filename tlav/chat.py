@@ -99,6 +99,11 @@ class Mark:
         self.style = None
         self.width = max(20, shutil.get_terminal_size((80, 24)).columns)
         self.thought_chunks = 0
+        self.rows = shutil.get_terminal_size((80, 24)).lines
+        self.live = True          # live tokens/s on the bottom row while writing
+        self.status_on = False
+        self.tokens = 0
+        self.write_t0 = 0.0
         self.markdown = True     # show **bold**, `code` and headings as styles, not symbols
         self.bold = self.code = self.heading = self.star = False
         self._stop = threading.Event()
@@ -132,11 +137,43 @@ class Mark:
                 sys.stdout.flush()
 
     def _run(self):
+        last_status = 0.0
         while not self._stop.wait(self.interval):
             with self.lock:
                 self.i += 1
                 sys.stdout.write("\b" + self._frame() if self.writing else self._header())
+                if self.status_on and time.time() - last_status >= 1.0:
+                    last_status = time.time()
+                    self._draw_status()
                 sys.stdout.flush()
+
+    # -- live speed on a status line pinned to the bottom row while the answer is written
+    def count(self, n: int = 1) -> None:
+        """One more token of the answer arrived."""
+        self.tokens += n
+
+    def _status_text(self) -> str:
+        secs = max(0.0, time.time() - (self.write_t0 or time.time()))
+        tps = self.tokens / secs if secs >= 0.5 else 0.0
+        return f"  {self.tokens} tokens · {tps:.1f} tokens/s · {int(secs)}s" + "   Ctrl+C stops"
+
+    def _draw_status(self) -> None:
+        # save the cursor, write on the reserved last row, come back: the answer is not disturbed
+        sys.stdout.write(f"\0337\033[{self.rows};1H\033[2K" + dim(self._status_text()[: self.width - 1]) + "\0338")
+
+    def _status_begin(self) -> None:
+        if self.rows < 6:
+            return
+        # make sure the cursor is not on the last row, then keep that row out of the scrolling area
+        sys.stdout.write("\n\033[1A" + f"\0337\033[1;{self.rows - 1}r\0338")
+        self.status_on = True
+        self._draw_status()
+
+    def _status_end(self) -> None:
+        if not self.status_on:
+            return
+        self.status_on = False
+        sys.stdout.write(f"\0337\033[r\033[{self.rows};1H\033[2K\0338")
 
     def start(self, prefix: str = "  ") -> None:
         self.t0 = time.time()
@@ -241,7 +278,11 @@ class Mark:
             if not self.writing:            # first words: the header settles into the logo
                 self.writing = True
                 self.col = 2
-                sys.stdout.write(f"\r\033[K  {accent('■')} {bold('Tlav')}\n  ")
+                self.write_t0 = time.time()
+                sys.stdout.write(f"\r\033[K  {accent('■')} {bold('Tlav')}\n")
+                if self.live:
+                    self._status_begin()
+                sys.stdout.write("  ")
             else:
                 sys.stdout.write("\b \b")
             sys.stdout.write(out + self._flow(text) + self._frame())
@@ -259,6 +300,7 @@ class Mark:
                     self.word += "*"
                     self.star = False
                 sys.stdout.write("\b \b" + self._word_out() + ("\033[0m" if self.bold or self.code or self.heading else ""))
+                self._status_end()
             else:
                 sys.stdout.write("\r\033[K")
             sys.stdout.flush()
@@ -493,6 +535,8 @@ class Chat:
                     mark.write("thinking · ", dim)
                 state["kind"] = kind
             out = chunk.replace("\n", "\n  ")
+            if kind == "answer":
+                mark.count()
             mark.write(out, dim if kind == "think" else None)
 
         mark.start("  ")   # the square starts moving the moment you press Enter

@@ -54,6 +54,7 @@ def test_think_default_follows_speed():
 def test_mark_cursor_circles_and_cleans_up(capsys):
     import time
     m = chat.Mark(enabled=True, interval=0.01)
+    m.live = False
     m.start("  ")
     m.write("Hello")
     time.sleep(0.06)
@@ -88,6 +89,7 @@ def test_mark_off_writes_plain_text(capsys):
 def test_mark_wraps_words_with_indent(capsys):
     m = chat.Mark(enabled=True, interval=10)
     m.width = 20
+    m.live = False
     m.start()
     m.write("alpha beta gamma delta epsilon")
     m.stop()
@@ -134,3 +136,20 @@ def test_markdown_shown_as_styles(capsys):
     text = "".join(vis)
     assert "**" not in text and "`" not in text and "##" not in text
     assert "• use bold and code here" in text and "2*3 = 6" in text  # bullets and lone stars kept readable
+
+
+def test_live_speed_on_bottom_row(capsys):
+    import time
+    m = chat.Mark(enabled=True, interval=0.05)
+    m.rows = 30
+    m.start()
+    for w in ["Old ", "computers ", "are ", "slow."]:
+        m.count()
+        m.write(w)
+        time.sleep(0.4)
+    m.stop()
+    out = capsys.readouterr().out
+    assert "\0337\033[1;29r\0338" in out                 # last row kept out of the scrolling area
+    assert "\033[30;1H" in out and "tokens/s" in out        # speed drawn on row 30
+    assert "4 tokens" in out or "3 tokens" in out
+    assert out.rstrip().endswith("\0338") and "\033[r" in out   # region released and row cleared at the end
