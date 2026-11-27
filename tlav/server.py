@@ -65,13 +65,37 @@ def start(args: List[str], wait: bool = True, timeout: int = 900, detach: bool =
         t0 = time.time()
         while time.time() - t0 < timeout:
             if proc.poll() is not None:
-                raise RuntimeError(f"llama-server exited early; see {config.home() / 'server.log'}")
+                raise RuntimeError(why_failed(config.home() / "server.log"))
             if healthy(url) and proc.poll() is None:
                 break
             time.sleep(1)
         else:
             raise RuntimeError("llama-server did not become ready in time.")
     return proc
+
+
+def why_failed(log_path) -> str:
+    """Turn the engine's log into a plain reason for a failed start."""
+    try:
+        text = open(log_path, errors="ignore").read()[-20000:]
+    except OSError:
+        text = ""
+    low = text.lower()
+    if "failed to load model" in low or "invalid magic" in low or "failed to read" in low \
+            or "tensor data is not within" in low or "corrupted" in low:
+        reason = ("the model file looks damaged or incomplete. Delete it and run `tlav` (or `tlav setup`) "
+                  "again to download a fresh copy")
+    elif "unknown model architecture" in low:
+        reason = "this AI engine is too old for this model. Run `tlav install-runtime` to update it"
+    elif "failed to allocate" in low or "out of memory" in low or "cannot allocate" in low:
+        reason = "there wasn't enough free memory. Close other programs, or run `tlav setup` to pick a smaller model"
+    elif "rpc" in low and ("failed" in low or "error" in low):
+        reason = ("a cluster worker didn't accept the model. Check `tlav worker` runs on each computer and that they "
+                  "all run the same AI engine build (`tlav install-runtime` on each)")
+    else:
+        errors = [l.split(" E ", 1)[-1].strip() for l in text.splitlines() if " E " in l]
+        reason = errors[-1] if errors else "it stopped while starting"
+    return f"The model couldn't start: {reason}.\n  Details: {log_path}"
 
 
 def healthy(url: str) -> bool:

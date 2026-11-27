@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 from typing import List, Optional
@@ -240,7 +241,10 @@ def _resolve_plan(args, nodes):
         sizes = {q: s for q, (_, s) in finder.repo_files(args.hf).items()}
         quants = [catalog.quant_from_file(sizes[q], model.params_b, q) for q in files]
         if args.quant:
+            offered = [q.name for q in quants]
             quants = [q for q in quants if q.name == args.quant.upper()]
+            if not quants:
+                sys.exit(f"{args.hf} has no {args.quant.upper()} file. It offers: {', '.join(sorted(offered))}.")
         plan = planner.plan_for_model(model, nodes, args.task, args.min_tps, _min_quant(args), args.kv, quants)
         if not plan:
             plan = planner.plan_for_model(model, nodes, args.task, 0.5, catalog.AGGRESSIVE_MIN_QUANT, args.kv, quants)
@@ -252,7 +256,10 @@ def _resolve_plan(args, nodes):
     if args.model:
         model = catalog.get(args.model)
         if args.quant:
-            q = catalog.QUANT_BY_NAME[args.quant]
+            if args.quant.upper() not in catalog.QUANT_BY_NAME:
+                sys.exit(f"Unknown compression level '{args.quant}'. Choose one of: "
+                         + ", ".join(q.name for q in catalog.QUANTS[1:]) + ".")
+            q = catalog.QUANT_BY_NAME[args.quant.upper()]
             plan = planner.evaluate_nodes(model, q, nodes[:1], args.task, args.kv)
             if not plan and len(nodes) > 1:
                 plan = planner.evaluate_nodes(model, q, nodes, args.task, args.kv)
@@ -503,6 +510,7 @@ def _launch(model_path, s, host, port, browser, draft=None, detach=False, quiet=
         proc = server.start(args, detach=detach)
     url = config.load_state()["server_url"]
     port = int(url.rsplit(":", 1)[1])   # may differ from the one asked for if it was busy
+    config.save_state(server_rpc=list(s.get("rpc") or []))   # the chat needs to know it's a cluster
     if quiet:
         return proc
     print(f"\nReady!  Web chat: {url}   OpenAI-compatible API: {url}/v1")
@@ -527,6 +535,8 @@ def cmd_run(args):
     nodes = _nodes(args) if args.cluster else None
     if args.model:
         path = Path(args.model).expanduser()
+        if not path.is_file():
+            sys.exit(f"Model file not found: {path}")
         hw = hardware.detect()
         nodes = nodes or [planner.Node(hw, benchmark.cached_or_run()["effective_gbps"])]
         plan = _plan_for_file(path, nodes, args.kv, force_split=args.force_split)
@@ -603,6 +613,8 @@ def cmd_chat(args):
     if args.model:  # a specific file: run it for this chat
         if server.status()["running"]:
             sys.exit("A model is already running; `tlav stop` first to chat with another file.")
+        if not Path(args.model).expanduser().is_file():
+            sys.exit(f"Model file not found: {Path(args.model).expanduser()}")
         hw = hardware.detect()
         path = Path(args.model).expanduser()
         plan = _plan_for_file(path, [planner.Node(hw, benchmark.cached_or_run()["effective_gbps"])], planner.DEFAULT_KV)
@@ -771,6 +783,13 @@ def cmd_list(args):
 
 # ------------------------------------------------------------------ parser
 
+def _port(v: str) -> int:
+    p = int(v)
+    if not 1 <= p <= 65535:
+        raise argparse.ArgumentTypeError("a port is a number from 1 to 65535")
+    return p
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="tlav", description="Turn old PCs and laptops into local AI workstations.")
     p.add_argument("--version", action="version", version=f"tlav {__version__}")
@@ -797,7 +816,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     def run_opts(s):
         s.add_argument("--host", default="127.0.0.1", help="0.0.0.0 to use it from other devices on your network")
-        s.add_argument("--port", type=int, default=8080)
+        s.add_argument("--port", type=_port, default=8080)
         s.add_argument("--no-browser", action="store_true")
         s.add_argument("--detach", action="store_true", help="run in the background")
         s.add_argument("--low-ram", action="store_true", help="smaller buffers, never lock memory")
@@ -887,7 +906,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     s = sub.add_parser("open", help="start your model and choose terminal or web chat (what plain `tlav` does)")
     s.add_argument("--where", choices=["terminal", "web"], help="skip the question")
-    s.add_argument("--port", type=int, default=8080)
+    s.add_argument("--port", type=_port, default=8080)
     s.set_defaults(func=cmd_open)
 
     s = sub.add_parser("chat", help="the Tlav chat terminal (starts your model if needed)")
@@ -895,13 +914,13 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--model", help="chat with a specific .gguf file")
     s.add_argument("--system", help="system prompt")
     s.add_argument("--think", choices=["on", "off"], help="model reasoning (default: on if this PC is fast)")
-    s.add_argument("--port", type=int, default=8080)
+    s.add_argument("--port", type=_port, default=8080)
     s.set_defaults(func=cmd_chat)
 
     s = sub.add_parser("worker", help="share this PC's RAM/CPU with a main Tlav computer (cluster)")
     s.add_argument("--host", help="interface to listen on (default: this PC's LAN address)")
-    s.add_argument("--port", type=int, default=cluster.RPC_PORT)
-    s.add_argument("--discovery-port", type=int, default=cluster.DISCOVERY_PORT)
+    s.add_argument("--port", type=_port, default=cluster.RPC_PORT)
+    s.add_argument("--discovery-port", type=_port, default=cluster.DISCOVERY_PORT)
     s.add_argument("--token", help="only answer scans that present this shared word")
     s.add_argument("--no-cache", action="store_true", help="don't keep received weights on disk")
     s.add_argument("--threads", type=int)
@@ -913,19 +932,44 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("address", nargs="?", help="IP[:PORT] for add/remove")
     s.add_argument("--token")
     s.add_argument("--timeout", type=float, default=2.0)
-    s.add_argument("--discovery-port", type=int, default=cluster.DISCOVERY_PORT)
+    s.add_argument("--discovery-port", type=_port, default=cluster.DISCOVERY_PORT)
     s.set_defaults(func=cmd_cluster)
 
     s = sub.add_parser("service", help="start Tlav automatically at login (always-on AI box)")
     s.add_argument("action", choices=["install", "uninstall"])
     s.add_argument("--worker", action="store_true", help="run as a cluster worker instead of the server")
     s.add_argument("--host", default="0.0.0.0")
-    s.add_argument("--port", type=int, default=8080)
+    s.add_argument("--port", type=_port, default=8080)
     s.set_defaults(func=cmd_service)
 
     s = sub.add_parser("list", help="list downloaded models")
     s.set_defaults(func=cmd_list)
     return p
+
+
+def friendly_error(e: BaseException) -> str:
+    """Plain words for the things that go wrong on real machines (no tracebacks)."""
+    import errno
+    import socket
+    import urllib.error
+    if isinstance(e, urllib.error.HTTPError):
+        if e.code in (401, 403, 404):
+            return ("Hugging Face doesn't have that (it may be misspelled, private, or need you to accept its "
+                    "license on huggingface.co first).")
+        if e.code == 429:
+            return "Hugging Face is rate-limiting this connection. Wait a minute and run the same command again."
+        return f"Hugging Face answered with an error ({e.code}). Try again in a minute."
+    if isinstance(e, (urllib.error.URLError, socket.timeout, TimeoutError, ConnectionResetError)):
+        return ("Can't reach the internet right now. Tlav only needs it to find and download models; "
+                "everything else works offline. Check the connection and run the same command again: "
+                "downloads continue where they stopped.")
+    if isinstance(e, OSError) and e.errno == errno.ENOSPC:
+        if e.strerror and e.strerror.startswith("Not enough disk space"):
+            return e.strerror
+        return "The disk is full. Free some space (or pick a smaller model) and run the same command again."
+    if isinstance(e, KeyError):
+        return str(e).strip("'\"")
+    return str(e)
 
 
 def main(argv=None):
@@ -935,10 +979,12 @@ def main(argv=None):
     args = build_parser().parse_args(argv)
     try:
         args.func(args)
-    except (runtime.RuntimeMissing, ConnectionError, KeyError) as e:
-        sys.exit(str(e).strip("'\""))
     except KeyboardInterrupt:
         sys.exit(130)
+    except (RuntimeError, ConnectionError, KeyError, OSError, ValueError) as e:
+        if os.environ.get("TLAV_DEBUG"):
+            raise
+        sys.exit(friendly_error(e))
 
 
 if __name__ == "__main__":

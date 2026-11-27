@@ -80,20 +80,36 @@ def install(role: str = "server", host: str = "127.0.0.1", port: int = 8080) -> 
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(launchd_plist(role, cmd, config.home()))
         subprocess.run(["launchctl", "unload", str(path)], capture_output=True)
-        subprocess.run(["launchctl", "load", "-w", str(path)], check=True)
+        try:
+            subprocess.run(["launchctl", "load", "-w", str(path)], check=True, capture_output=True)
+        except subprocess.CalledProcessError as e:
+            raise RuntimeError(f"macOS refused to load the login item ({(e.stderr or b'').decode()[:120].strip()}). "
+                               f"The file is at {path}.") from None
         return f"Installed launchd agent {path}"
     if system == "Linux":
         path = _paths(role)["Linux"]
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(systemd_unit(role, cmd))
-        subprocess.run(["systemctl", "--user", "daemon-reload"], check=True)
-        subprocess.run(["systemctl", "--user", "enable", "--now", path.name], check=True)
+        try:
+            for step in (["daemon-reload"], ["enable", "--now", path.name]):
+                subprocess.run(["systemctl", "--user"] + step, check=True, capture_output=True, text=True)
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            raise RuntimeError(
+                f"Saved the service file ({path}), but this system has no user service manager running "
+                "(common on WSL, containers and minimal installs), so it can't start at login here. "
+                "Add `tlav " + ("worker" if role == "worker" else "run --detach") + "` to your startup "
+                "programs instead, or just type `tlav` when you need it.") from None
         return (f"Installed systemd user service {path.name}. To keep it running when nobody is logged in: "
                 f"sudo loginctl enable-linger {os.environ.get('USER', '$USER')}")
     if system == "Windows":
         task = f"Tlav-{role}"
         quoted = " ".join(f'"{c}"' if " " in c else c for c in cmd)
-        subprocess.run(["schtasks", "/Create", "/F", "/SC", "ONLOGON", "/TN", task, "/TR", quoted], check=True)
+        try:
+            subprocess.run(["schtasks", "/Create", "/F", "/SC", "ONLOGON", "/TN", task, "/TR", quoted], check=True,
+                           capture_output=True)
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            raise RuntimeError("Windows refused to create the startup task (try a terminal opened with "
+                               "'Run as administrator').") from None
         return f"Installed scheduled task {task} (starts at logon)"
     raise RuntimeError(f"Unsupported OS: {system}")
 
