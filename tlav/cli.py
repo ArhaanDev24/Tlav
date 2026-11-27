@@ -866,6 +866,90 @@ def cmd_list(args):
         print(f"{mark} {f.name:<60} {f.stat().st_size / 1024 ** 3:6.2f} GB")
 
 
+# ------------------------------------------------------------------ remove / uninstall
+
+def _pick_models(files, words):
+    from . import remove
+    chosen = []
+    for w in words:
+        hit = remove.match(files, w)
+        if not hit:
+            sys.exit(f"No downloaded model matches '{w}'. Type `tlav remove` to see them.")
+        if len(hit) > 1:
+            sys.exit(f"'{w}' matches {len(hit)} models ({', '.join(f.name for f in hit)}). "
+                     "Use more of the name, or its number from `tlav remove`.")
+        chosen += [f for f in hit if f not in chosen]
+    return chosen
+
+
+def cmd_remove(args):
+    """Delete downloaded models to free disk space. Tlav itself stays installed."""
+    from . import remove
+    files = remove.model_files()
+    if not files:
+        print("No models downloaded. Nothing to delete.")
+        return
+    if args.all:
+        chosen = files
+    elif args.names:
+        chosen = _pick_models(files, args.names)
+    else:
+        ui.heading("Your downloaded models")
+        remove.describe(files)
+        print()
+        if not sys.stdin.isatty():
+            print("Delete one with `tlav remove NAME` (or its number), or all of them with `tlav remove --all`.")
+            return
+        try:
+            ans = input("  Which ones should go? Numbers or names, 'all', or Enter to keep everything: ").strip()
+        except EOFError:
+            ans = ""
+        if not ans:
+            print("  Nothing deleted.")
+            return
+        chosen = files if ans.lower() == "all" else _pick_models(files, ans.replace(",", " ").split())
+    total = sum(f.size for f in chosen)
+    active, _ = remove._active_paths()
+    in_use = any(str(f.path) == active for f in chosen)
+    names = ", ".join(f.name for f in chosen) if len(chosen) <= 3 else f"{len(chosen)} models"
+    print(f"  This deletes {names} and frees {remove.gb(total)}.")
+    if in_use:
+        print("  It's the model you chat with now: Tlav stops it, and sets up a new one next time you type `tlav`.")
+    if not args.yes and not ui.ask("Delete?", default="y"):
+        print("  Nothing deleted.")
+        return
+    was_running = in_use and server.status().get("running")
+    freed = remove.delete_models(chosen)
+    print(f"  Deleted. Freed {remove.gb(freed)}." + (" The model was stopped first." if was_running else ""))
+    if in_use:
+        print("  Type `tlav` when you want a model again.")
+
+
+def cmd_uninstall(args):
+    """Remove Tlav from this computer: models, AI engine, chats, settings, services and the program."""
+    from . import remove
+    items = [i for i in remove.plan() if not (args.keep_models and i[0] == "Models")]
+    total = sum(i[2] for i in items)
+    ui.heading("Remove Tlav from this computer")
+    for label, _, size in items:
+        print(f"  {label:<44} {remove.gb(size):>9}")
+    print("  Startup services, if you set any up")
+    print(f"  {'Total':<44} {remove.gb(total):>9}")
+    print("  Python stays installed." + (" Your models are kept." if args.keep_models else ""))
+    print()
+    if not args.yes:
+        if not sys.stdin.isatty():
+            sys.exit("To remove Tlav without being asked, run `tlav uninstall --yes`.")
+        if not ui.ask("Remove all of this?", default="n"):
+            print("  Nothing removed.")
+            return
+    notes = remove.uninstall(keep_models=args.keep_models)
+    print(f"  Tlav is removed. Freed {remove.gb(total)}.")
+    for n in notes:
+        print("  " + n)
+    print("  Thanks for giving an old computer a new mind.")
+
+
 # ------------------------------------------------------------------ parser
 
 def _port(v: str) -> int:
@@ -1033,6 +1117,18 @@ def build_parser() -> argparse.ArgumentParser:
 
     s = sub.add_parser("list", help="list downloaded models")
     s.set_defaults(func=cmd_list)
+
+    s = sub.add_parser("remove", aliases=["delete", "rm"],
+                       help="delete downloaded models to free disk space (Tlav stays installed)")
+    s.add_argument("names", nargs="*", help="model file names, parts of them, or numbers from the list")
+    s.add_argument("--all", action="store_true", help="delete every downloaded model")
+    s.add_argument("-y", "--yes", action="store_true", help="don't ask before deleting")
+    s.set_defaults(func=cmd_remove)
+
+    s = sub.add_parser("uninstall", help="remove Tlav completely: models, AI engine, chats, settings and the program")
+    s.add_argument("--keep-models", action="store_true", help="remove everything except the downloaded models")
+    s.add_argument("-y", "--yes", action="store_true", help="don't ask first")
+    s.set_defaults(func=cmd_uninstall)
     return p
 
 

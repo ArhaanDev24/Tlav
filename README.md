@@ -118,6 +118,8 @@ Run `tlav worker` on spare computers, then `tlav setup --cluster` on the main on
 | `tlav run` | Web chat + OpenAI-compatible API |
 | `tlav worker` | Lend this PC to a cluster |
 | `tlav stop` | Free the memory |
+| `tlav remove` | Delete models you no longer need |
+| `tlav uninstall` | Remove Tlav completely |
 
 Everything else is in the **[full guide](docs/GUIDE.md)**.
 

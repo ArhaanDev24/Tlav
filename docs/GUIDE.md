@@ -227,8 +227,23 @@ A bigger model compressed to Q4_K_M almost always beats a smaller model kept at 
 | `tlav service install [--worker]` | Start at login (launchd / systemd / Task Scheduler): an always-on AI box |
 | `tlav install-runtime` | Install/rebuild llama.cpp tuned for this CPU |
 | `tlav list` | Downloaded models |
+| `tlav remove [NAME…]` / `--all` | Delete downloaded models to free disk space (Tlav stays installed); with no name it lists them and asks |
+| `tlav uninstall [--keep-models]` | Remove Tlav completely: models, AI engine, chats, settings, startup services and the `tlav` command |
 
 Everything lives in `~/.tlav` (change it with `TLAV_HOME`).
+
+### Removing models, or Tlav itself
+
+```bash
+tlav remove            # lists your models with their sizes; pick which to delete
+tlav remove gemma      # delete one by name (or part of it, or its number)
+tlav remove --all      # delete every model, keep Tlav
+tlav uninstall         # remove Tlav completely (asks first)
+```
+
+`tlav remove` also deletes the helper files that belong to a model (importance matrices, quality-check data, unfinished downloads). If you delete the model you chat with, Tlav stops it and sets up a new one the next time you type `tlav`.
+
+`tlav uninstall` shows exactly what it will delete and how much space that frees, then removes the models, the AI engine Tlav built, your chats and settings, any startup services and the `tlav` command. Python stays installed. `--keep-models` keeps your downloaded models for later.
 
 ## Use it from other apps
 
