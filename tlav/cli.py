@@ -1061,7 +1061,25 @@ def friendly_error(e: BaseException) -> str:
     return str(e)
 
 
+def _safe_console() -> None:
+    """Never crash on a character the console can't show (e.g. '≥' on a Windows cp1252 pipe)."""
+    for s in (sys.stdout, sys.stderr):
+        enc = (getattr(s, "encoding", None) or "").lower().replace("-", "")
+        if not enc or enc.startswith("utf") or not hasattr(s, "reconfigure"):
+            continue
+        try:
+            # Piped or redirected output: write UTF-8, which other programs expect.
+            # A real old console: keep its encoding and show '?' for what it can't draw.
+            if s.isatty():
+                s.reconfigure(errors="replace")
+            else:
+                s.reconfigure(encoding="utf-8", errors="replace")
+        except (ValueError, OSError, AttributeError):
+            pass
+
+
 def main(argv=None):
+    _safe_console()
     argv = sys.argv[1:] if argv is None else argv
     if not argv:  # just `tlav`: chat if a model is set up, otherwise set one up
         argv = ["open"] if config.load_state().get("active") else ["setup"]

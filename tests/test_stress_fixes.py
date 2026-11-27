@@ -1,5 +1,6 @@
 """Regression tests for problems found by the stress test."""
 import errno
+import sys
 import urllib.error
 
 import pytest
@@ -106,3 +107,16 @@ def test_status_line_follows_resize(capsys, monkeypatch):
     assert "\x1b[30;1H\x1b[2K\x1b[r" in out          # old status row wiped, old region released
     assert "\x1b7\x1b[1;41r\x1b8" in out             # new last row reserved
     assert (m.rows, m.width) == (42, 120)
+
+
+def test_safe_console_survives_cp1252_pipe(monkeypatch):
+    """`tlav recommend` printed '≥' and crashed on Windows CI (cp1252 pipe)."""
+    import io
+    from tlav import cli
+    raw = io.BytesIO()
+    out = io.TextIOWrapper(raw, encoding="cp1252")
+    monkeypatch.setattr(sys, "stdout", out)
+    cli._safe_console()
+    print("speed ≥2.5 tokens/s ▕██▏")
+    out.flush()
+    assert "≥2.5".encode("utf-8") in raw.getvalue()
