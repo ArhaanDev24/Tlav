@@ -8,8 +8,9 @@
 <style>
 /* Tlav web chat. Served by llama-server from ~/.tlav/web; works fully offline (system fonts only). */
 :root {
-  --bg: #f4f6f0; --surface: #fbfcf9; --ink: #13170f; --muted: #5d6656; --line: #d9dfd2;
-  --soft: #e8ede2; --deep: #24402c; --pixel: #f26b3a; --on-deep: #f3f6ee; --danger: #b3412b;
+  --bg: #ffffff; --surface: #ffffff; --ink: #13170f; --muted: #5d6656; --line: #e4e9df;
+  --soft: #f1f5ee; --deep: #24402c; --pixel: #f26b3a; --on-deep: #f3f6ee; --danger: #b3412b;
+  --fx-a: #7aa886; --fx-b: #f26b3a;   /* background pixels */
   --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
   color-scheme: light;
@@ -17,8 +18,12 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --bg: #11150f; --surface: #171c15; --ink: #e9eee3; --muted: #9aa592; --line: #2a3226;
-    --soft: #1f261c; --deep: #2f5a3b; --pixel: #f47a4c; --on-deep: #f3f6ee; color-scheme: dark;
+    --soft: #1f261c; --deep: #2f5a3b; --pixel: #f47a4c; --on-deep: #f3f6ee; --fx-a: #4f7a5a; --fx-b: #f47a4c; color-scheme: dark;
   }
+}
+:root[data-theme="dark"] {
+  --bg: #11150f; --surface: #171c15; --ink: #e9eee3; --muted: #9aa592; --line: #2a3226;
+  --soft: #1f261c; --deep: #2f5a3b; --pixel: #f47a4c; --on-deep: #f3f6ee; --fx-a: #4f7a5a; --fx-b: #f47a4c; color-scheme: dark;
 }
 * { box-sizing: border-box; }
 html, body { height: 100%; margin: 0; }
@@ -40,7 +45,11 @@ header { display: flex; align-items: center; gap: 12px; padding: 12px max(16px, 
 .toggle { display: flex; align-items: center; gap: 6px; font-size: 14px; color: var(--muted); user-select: none; }
 .toggle input { accent-color: var(--pixel); width: 16px; height: 16px; }
 
-main { flex: 1; overflow-y: auto; }
+main { flex: 1; overflow-y: auto; position: relative; z-index: 1; }
+header, form { position: relative; z-index: 2; }
+/* slow pixel field behind the conversation (decorative, paused for reduced motion) */
+#fx { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; }
+.meta .live { color: var(--ink); }
 .log { max-width: 780px; margin: 0 auto; padding: 24px 16px 8px; display: grid; gap: 18px; }
 .empty { text-align: center; color: var(--muted); padding: 12vh 16px 0; }
 .empty .mark { width: 36px; height: 36px; margin: 0 auto 14px; }
@@ -57,6 +66,8 @@ main { flex: 1; overflow-y: auto; }
 .think div { white-space: pre-wrap; margin-top: 6px; overflow-wrap: anywhere; }
 .text { background: var(--soft); padding: 12px 16px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .text:empty { display: none; }
+.text code { font: .92em var(--mono); background: var(--bg); padding: 1px 5px; }
+.text b { font-weight: 650; }
 .pen { display: inline-block; width: 11px; height: 11px; margin-left: 5px; vertical-align: -1px; }
 .meta { display: flex; gap: 12px; align-items: center; font: 12px var(--mono); color: var(--muted); }
 .meta button { border: 0; background: none; padding: 2px 0; color: var(--muted); font: 12px var(--sans); text-decoration: underline; text-underline-offset: 3px; }
@@ -91,6 +102,7 @@ textarea:focus { border-color: var(--ink); outline: none; }
     <button class="btn" id="newChat" type="button">New chat</button>
   </div>
 </header>
+<canvas id="fx" aria-hidden="true"></canvas>
 <main id="scroller">
   <div class="log" id="log" aria-live="polite"></div>
 </main>
@@ -108,13 +120,20 @@ textarea:focus { border-color: var(--ink); outline: none; }
   const $ = (id) => document.getElementById(id);
   const MARK = '<rect width="4" height="4" fill="var(--ink)"/><rect class="q" x="2" width="2" height="2" fill="var(--pixel)"/>';
   const svg = (cls) => { const s = document.createElementNS("http://www.w3.org/2000/svg", "svg"); s.setAttribute("viewBox", "0 0 4 4"); s.setAttribute("class", cls); s.setAttribute("aria-hidden", "true"); s.innerHTML = MARK; return s; };
+  // Basic markdown for replies (models write **bold**, `code`, bullets and headings). Everything is
+  // escaped first, so a reply can never inject HTML into the page.
+  const md = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c])
+    .replace(/^#{1,6} +(.+)$/gm, "<b>$1</b>")
+    .replace(/^(\s*)[*-] +/gm, "$1• ")
+    .replace(/\*\*([^*\n]+)\*\*/g, "<b>$1</b>")
+    .replace(/`([^`\n]+)`/g, "<code>$1</code>");
   const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 
   // Settings Tlav writes next to this page (tlav.json); sensible defaults if it is missing.
   let cfg = { model: "", quant: "", ctx: 4096, est_tps: 0, reasons: false, where: "this computer",
               verbs: ["Defragmenting the C: drive", "Warming up the CRT", "Counting to 640K", "Tlaving"] };
   const KEY = "tlav.chat.v1";
-  let messages = [], busy = null, think = false, temperature = 0.7;
+  let messages = [], busy = null, think = false, temperature = 0.7, fxBusy = false;
   let restartHint = "Type `tlav` in a terminal to start it again.";
 
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(messages)); } catch (e) { /* private mode */ } };
@@ -159,7 +178,7 @@ textarea:focus { border-color: var(--ink); outline: none; }
     for (const m of shown) {
       if (m.role === "user") { log.appendChild(meBubble(m.content)); continue; }
       const a = aiBlock();
-      a.text.textContent = m.content;
+      a.text.innerHTML = md(m.content);
       if (m.stats) a.meta.appendChild(el("span", null, m.stats));
       a.meta.appendChild(copyBtn(() => m.content));
       log.appendChild(a.wrap);
@@ -231,13 +250,19 @@ textarea:focus { border-color: var(--ink); outline: none; }
       a.meta.appendChild(el("span", null, "your message was longer than the model can hold; Tlav kept its start and end"));
     }
 
-    let writeAt = 0;
+    let writeAt = 0, liveTimer = null;
+    const live = el("span", "live");
+    const showLive = () => {
+      const secs = (performance.now() - writeAt) / 1000;
+      live.textContent = `${n} tokens · ${(n / Math.max(secs, .5)).toFixed(1)} tokens/s · ${Math.floor(secs)}s`;
+    };
     const startWriting = () => {
       if (phase === "write") return;
       phase = "write"; writeAt = performance.now();
+      a.meta.prepend(live); setTimeout(showLive, 0); liveTimer = setInterval(showLive, 1000);   // speed, updated every second
       a.mark.classList.remove("moving");
       a.verb.textContent = ""; a.secs.textContent = "";
-      a.text.textContent = ""; a.text.appendChild(document.createTextNode("")); a.text.appendChild(pen);
+      a.text.textContent = ""; a.text.appendChild(el("span")); a.text.appendChild(pen);
     };
     const showThinking = (chunk) => {
       reasoning += chunk; thoughts++;
@@ -289,7 +314,7 @@ textarea:focus { border-color: var(--ink); outline: none; }
             if (!answer && !chunk.trim()) continue;
             startWriting();
             answer += chunk; n++;
-            a.text.firstChild.textContent = answer;
+            a.text.firstChild.innerHTML = md(answer);
           }
           toBottom();
         }
@@ -300,12 +325,12 @@ textarea:focus { border-color: var(--ink); outline: none; }
     }
     if (!error && !finished && !ctrl.signal.aborted && (answer || reasoning)) error = "The answer was cut off: the model stopped responding. " + restartHint;
     else if (!error && hitLimit && answer) a.meta.appendChild(el("span", null, "reached its length limit; ask it to continue"));
-    clearInterval(tick);
+    clearInterval(tick); clearInterval(liveTimer); live.remove();
     busy = null; setBusy(false);
     pen.remove(); a.mark.classList.remove("moving"); a.verb.textContent = ""; a.secs.textContent = "";
     if (thinkBox) { thinkBox.firstChild.textContent = `Thought for ${Math.max(1, Math.round(((writeAt || performance.now()) - t0) / 1000))}s`; }
     answer = answer.trim();
-    a.text.textContent = answer;
+    a.text.innerHTML = md(answer);
     if (error) a.meta.appendChild(el("span", "error", error));
     if (answer) {
       const secs = (performance.now() - t0) / 1000;
@@ -327,7 +352,7 @@ textarea:focus { border-color: var(--ink); outline: none; }
 
   // ---------- controls
   const input = $("input"), btn = $("send");
-  const setBusy = (on) => { btn.textContent = on ? "Stop" : "Send"; btn.classList.toggle("stop", on); btn.type = on ? "button" : "submit"; };
+  const setBusy = (on) => { fxBusy = on; btn.textContent = on ? "Stop" : "Send"; btn.classList.toggle("stop", on); btn.type = on ? "button" : "submit"; };
   const grow = () => { input.style.height = "auto"; input.style.height = Math.min(input.scrollHeight + 2, innerHeight * .4) + "px"; };
   input.addEventListener("input", grow);
   input.addEventListener("keydown", (e) => {
@@ -337,6 +362,53 @@ textarea:focus { border-color: var(--ink); outline: none; }
   btn.addEventListener("click", () => { if (busy) busy.abort(); });
   $("newChat").addEventListener("click", () => { if (busy) busy.abort(); messages = messages.filter((m) => m.role === "system"); save(); render(); input.focus(); });
   $("think").addEventListener("change", (e) => { think = e.target.checked; try { localStorage.setItem("tlav.think", think ? "1" : "0"); } catch (x) {} });
+
+  // ---------- background: slow pixel field, kept clear of the reading column
+  (() => {
+    const c = $("fx"), g = c.getContext("2d");
+    const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const GAP = 22, SZ = 5;
+    let W = 0, H = 0, cells = [], colA = "#7aa886", colB = "#f26b3a", energy = 0, lastT = 0;
+    const token = (v, d) => getComputedStyle(document.documentElement).getPropertyValue(v).trim() || d;
+    const build = () => {
+      const dpr = Math.min(2, devicePixelRatio || 1);
+      W = innerWidth; H = innerHeight; c.width = W * dpr; c.height = H * dpr; g.setTransform(dpr, 0, 0, dpr, 0, 0);
+      colA = token("--fx-a", colA); colB = token("--fx-b", colB);
+      cells = [];
+      for (let y = GAP / 2; y < H; y += GAP) for (let x = GAP / 2; x < W; x += GAP)
+        if (Math.random() < .55) cells.push({ x, y, ph: Math.random() * 6.28, sp: .15 + Math.random() * .25, hot: Math.random() < .06 });
+    };
+    const side = (x) => {   // 0 behind the text column, 1 out at the edges
+      const half = Math.min(420, W * .38), d = Math.abs(x - W / 2) - half;
+      return Math.max(0, Math.min(1, d / 160 + (W < 700 ? .3 : 0)));
+    };
+    const draw = (t) => {
+      const s = t / 1000;
+      energy += ((fxBusy ? 1 : 0) - energy) * .03;          // a little brighter while it writes
+      g.clearRect(0, 0, W, H);
+      for (const p of cells) {
+        const e = side(p.x);
+        if (e < .02) continue;
+        const wave = .5 + .5 * Math.sin(p.x * .008 + p.y * .006 - s * .35);   // slow diagonal wave
+        const tw = .5 + .5 * Math.sin(s * p.sp + p.ph);                        // gentle twinkle
+        const v = wave * tw, sz = SZ * (.55 + .6 * v);
+        g.globalAlpha = Math.min(.5, (.07 + .32 * v) * (1 + energy * .7) * e);
+        g.fillStyle = p.hot ? colB : colA;
+        g.fillRect(Math.round(p.x - sz / 2), Math.round(p.y - sz / 2), Math.round(sz), Math.round(sz));
+      }
+      g.globalAlpha = 1;
+    };
+    const loop = (t) => {
+      if (!document.hidden && t - lastT > 33) { lastT = t; draw(t); }   // ~30 fps is plenty for slow motion
+      requestAnimationFrame(loop);
+    };
+    build();
+    addEventListener("resize", build);
+    new MutationObserver(build).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    const mq = matchMedia("(prefers-color-scheme: dark)");
+    if (mq.addEventListener) mq.addEventListener("change", () => { build(); if (still) draw(4000); });
+    if (still) draw(4000); else requestAnimationFrame(loop);
+  })();
 
   // ---------- start
   const start = async () => {
