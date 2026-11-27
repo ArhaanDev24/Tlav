@@ -12,6 +12,16 @@
       "source": "/github",
       "destination": "https://github.com/ArhaanDev24/Tlav",
       "permanent": false
+    },
+    {
+      "source": "/install.sh",
+      "destination": "https://raw.githubusercontent.com/ArhaanDev24/Tlav/main/install.sh",
+      "permanent": false
+    },
+    {
+      "source": "/install.ps1",
+      "destination": "https://raw.githubusercontent.com/ArhaanDev24/Tlav/main/install.ps1",
+      "permanent": false
     }
   ],
   "headers": [

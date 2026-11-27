@@ -48,17 +48,17 @@
 
 ## Install
 
-**macOS / Linux**
+**macOS / Linux** (in Terminal)
 ```bash
-git clone https://github.com/ArhaanDev24/Tlav && cd Tlav && ./install.sh
+curl -fsSL https://tlav.online/install.sh | bash
 ```
 
-**Windows (PowerShell)**
+**Windows** (in PowerShell)
 ```powershell
-git clone https://github.com/ArhaanDev24/Tlav; cd Tlav; ./install.ps1
+irm https://tlav.online/install.ps1 | iex
 ```
 
-Then just type `tlav`. You only need Python 3.8+.
+Then just type `tlav`. You only need Python 3.8+, and on Windows the installer offers to install it for you.
 
 ## See it work
 

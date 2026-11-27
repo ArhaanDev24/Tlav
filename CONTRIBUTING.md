@@ -5,7 +5,8 @@ Thanks for helping old computers think. Tlav is small on purpose: pure Python (s
 ## Getting started
 
 ```bash
-git clone https://github.com/ArhaanDev24/Tlav && cd Tlav
+git clone https://github.com/ArhaanDev24/Tlav
+cd Tlav
 pip install -e ".[dev]"
 pytest
 ```

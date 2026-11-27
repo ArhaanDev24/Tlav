@@ -16,15 +16,26 @@ Everything Tlav does, in detail. For the short version, see the [README](../READ
 
 Requires Python 3.8+ and nothing else. On first setup Tlav builds [llama.cpp](https://github.com/ggml-org/llama.cpp), tuned for your exact CPU.
 
-**macOS / Linux**
+**macOS / Linux** (in Terminal)
 ```bash
-git clone https://github.com/ArhaanDev24/Tlav && cd Tlav && ./install.sh
+curl -fsSL https://tlav.online/install.sh | bash
 ```
 
-**Windows (PowerShell)**
+**Windows** (in PowerShell)
 ```powershell
-git clone https://github.com/ArhaanDev24/Tlav; cd Tlav; ./install.ps1
+irm https://tlav.online/install.ps1 | iex
 ```
+
+<details>
+<summary>Installing from a downloaded copy instead</summary>
+
+```bash
+git clone https://github.com/ArhaanDev24/Tlav
+cd Tlav
+./install.sh                                              # macOS / Linux
+powershell -ExecutionPolicy Bypass -File .\install.ps1    # Windows
+```
+</details>
 
 ### Intel Macs (2010–2020), including the 2013 iMac
 Tlav builds llama.cpp from source with AVX2 on and Metal off (old Mac GPUs are slower than the CPU for this). You need Apple's command line tools once:

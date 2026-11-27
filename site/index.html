@@ -375,6 +375,12 @@ input[type=range]::-moz-range-thumb { width: 18px; height: 18px; background: var
 .cmd { display: flex; align-items: center; gap: 12px; min-width: 0; margin-top: 10px; padding: 12px 12px 12px 16px; background: var(--ink); color: #eef3e8; }
 .cmd code { flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; font-size: 14px; scrollbar-width: none; }
 .cmd code::before { content: "$ "; color: var(--pixel); }
+.cmd.ps code::before { content: "PS> "; }
+[role="tabpanel"][hidden] { display: none; }
+.ostabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 2px; }
+.ostabs button { font: 500 13px var(--sans); padding: 6px 12px; min-height: 34px; border: 1px solid var(--line); background: transparent; color: var(--muted); cursor: pointer; }
+.ostabs button[aria-selected="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.ostabs button:focus-visible { outline: 2px solid var(--pixel); outline-offset: 2px; }
 .cmd { position: relative; overflow: hidden; }
 .cmd .px-sweep { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 .copy { flex: none; padding: 7px 12px; border: 1px solid rgba(238, 243, 232, .3); background: transparent; color: #eef3e8; font: 500 13px var(--sans); cursor: pointer; transition: background-color .2s; }
@@ -657,8 +663,15 @@ footer a:hover { color: var(--ink); }
         <div class="ctas"><a class="btn" href="https://github.com/ArhaanDev24/Tlav" target="_blank" rel="noopener">View on GitHub <svg class="px" viewBox="0 0 7 7" aria-hidden="true"><path fill="currentColor" d="M2 0h5v5H6V2H5v1H4v1H3v1H2v1H1v1H0V6h1V5h1V4h1V3h1V2h1V1H2z"/></svg></a><span>Free and open source</span></div>
       </div>
       <ol class="isteps">
-        <li><span class="n" aria-hidden="true">1</span><b>Install</b><p>macOS and Linux. On Windows, run <code>install.ps1</code> in PowerShell.</p>
-          <div class="cmd"><code>git clone https://github.com/ArhaanDev24/Tlav &amp;&amp; cd Tlav &amp;&amp; ./install.sh</code><button class="copy" type="button">Copy</button></div></li>
+        <li><span class="n" aria-hidden="true">1</span><b>Install</b>
+          <div class="ostabs" role="tablist" aria-label="Your computer">
+            <button type="button" role="tab" id="os-unix" aria-controls="cmd-unix" aria-selected="true">macOS / Linux</button>
+            <button type="button" role="tab" id="os-win" aria-controls="cmd-win" aria-selected="false" tabindex="-1">Windows</button>
+          </div>
+          <div id="cmd-unix" role="tabpanel" aria-labelledby="os-unix"><p>Paste into Terminal. Needs Python 3.8 or newer.</p>
+            <div class="cmd"><code>curl -fsSL https://tlav.online/install.sh | bash</code><button class="copy" type="button">Copy</button></div></div>
+          <div id="cmd-win" role="tabpanel" aria-labelledby="os-win" hidden><p>Paste into PowerShell. No git needed, and it offers to install Python if it's missing.</p>
+            <div class="cmd ps"><code>irm https://tlav.online/install.ps1 | iex</code><button class="copy" type="button">Copy</button></div></div></li>
         <li><span class="n" aria-hidden="true">2</span><b>Start</b><p>Measures your machine, picks the best model and compresses it to fit.</p>
           <div class="cmd"><code>tlav</code><button class="copy" type="button">Copy</button></div></li>
         <li><span class="n" aria-hidden="true">3</span><b>Chat</b><p>In your terminal or your browser, your choice each time. Nothing leaves your computer. Next time, just type <code>tlav</code>.</p></li>
@@ -1109,6 +1122,21 @@ footer a:hover { color: var(--ink); }
     };
     requestAnimationFrame(frame);
   };
+
+  /* install: show the command for this visitor's computer (they can switch) */
+  {
+    const tabs = [...document.querySelectorAll(".ostabs [role=tab]")];
+    const pick = (tab, focus) => tabs.forEach((t) => {
+      const on = t === tab; t.setAttribute("aria-selected", String(on)); t.tabIndex = on ? 0 : -1;
+      $(t.getAttribute("aria-controls")).hidden = !on; if (on && focus) t.focus();
+    });
+    tabs.forEach((t, i) => {
+      t.addEventListener("click", () => pick(t));
+      t.addEventListener("keydown", (e) => { if (e.key === "ArrowRight" || e.key === "ArrowLeft") { e.preventDefault(); pick(tabs[(i + (e.key === "ArrowRight" ? 1 : tabs.length - 1)) % tabs.length], true); } });
+    });
+    const plat = ((navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || navigator.userAgent || "").toLowerCase();
+    if (plat.includes("win")) pick($("os-win"));
+  }
 
   /* copy */
   document.querySelectorAll(".copy").forEach((b) => b.addEventListener("click", () => {
