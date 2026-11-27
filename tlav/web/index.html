@@ -115,6 +115,7 @@ textarea:focus { border-color: var(--ink); outline: none; }
               verbs: ["Defragmenting the C: drive", "Warming up the CRT", "Counting to 640K", "Tlaving"] };
   const KEY = "tlav.chat.v1";
   let messages = [], busy = null, think = false, temperature = 0.7;
+  let restartHint = "Type `tlav` in a terminal to start it again.";
 
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(messages)); } catch (e) { /* private mode */ } };
   const load = () => { try { const m = JSON.parse(localStorage.getItem(KEY) || "[]"); return Array.isArray(m) ? m : []; } catch (e) { return []; } };
@@ -218,8 +219,17 @@ textarea:focus { border-color: var(--ink); outline: none; }
     }, 250);
     const pen = svg("pen moving");
     let answer = "", reasoning = "", thinkBox = null, thinkText = null, n = 0, timings = null, first = 0, thoughts = 0;
-    const { prompt, dropped } = fit(messages, Math.min(2048, Math.floor(cfg.ctx / 2)));
+    const room0 = Math.max(256, Math.min(2048, Math.floor(cfg.ctx / 2)));
+    const reserve = think && cfg.reasons ? Math.max(room0, Math.floor(cfg.ctx / 2)) : room0;
+    const { prompt, dropped } = fit(messages, reserve);
     if (dropped) a.meta.appendChild(el("span", null, `oldest ${dropped} messages left out to make room`));
+    // a single message bigger than the model's memory: keep its start and end
+    const shorten = (s, maxTok, cpt) => { const keep = Math.max(200, Math.floor(maxTok * cpt)); if (s.length <= keep) return s; const h = Math.floor(keep * .7); return s.slice(0, h) + "\n\n[… the middle of this message was left out to fit the model's memory …]\n\n" + s.slice(s.length - (keep - h)); };
+    const room = cfg.ctx - reserve - tokens(prompt.slice(0, -1)) - 16;
+    if (tokens(prompt.slice(-1)) > room) {
+      prompt[prompt.length - 1] = { role: "user", content: shorten(prompt[prompt.length - 1].content, room, 3) };
+      a.meta.appendChild(el("span", null, "your message was longer than the model can hold; Tlav kept its start and end"));
+    }
 
     let writeAt = 0;
     const startWriting = () => {
@@ -242,12 +252,17 @@ textarea:focus { border-color: var(--ink); outline: none; }
     const feed = splitter();
     const ctrl = new AbortController();
     busy = ctrl; setBusy(true);
-    let error = "";
+    let error = "", finished = false, hitLimit = false;
     try {
-      const room = Math.max(256, Math.min(2048, Math.floor(cfg.ctx / 2)));
-      const body = { messages: prompt, stream: true, temperature, max_tokens: think && cfg.reasons ? Math.max(room, Math.floor(cfg.ctx / 2)) : room };
+      const body = { messages: prompt, stream: true, temperature, max_tokens: reserve };
       if (cfg.reasons) body.chat_template_kwargs = { enable_thinking: think };
-      const res = await fetch("v1/chat/completions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal: ctrl.signal });
+      const post = () => fetch("v1/chat/completions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal: ctrl.signal });
+      let res = await post();
+      if (res.status === 400) {   // still too long (the estimate was low): try once with half
+        prompt[prompt.length - 1] = { role: "user", content: shorten(prompt[prompt.length - 1].content, Math.max(64, Math.floor(room / 2)), 2) };
+        res = await post();
+        if (res.status === 400) throw new Error("that message is too long for this model's memory. Shorten it or send it in parts");
+      }
       if (!res.ok || !res.body) throw new Error(`the model answered ${res.status}`);
       const reader = res.body.getReader(), dec = new TextDecoder();
       let rest = "";
@@ -262,6 +277,7 @@ textarea:focus { border-color: var(--ink); outline: none; }
           if (data === "[DONE]") continue;
           let j; try { j = JSON.parse(data); } catch (e) { continue; }
           if (j.timings) timings = j.timings;
+          if (j.choices && j.choices[0] && j.choices[0].finish_reason) { finished = true; hitLimit = j.choices[0].finish_reason === "length"; }
           const d = j.choices && j.choices[0] && j.choices[0].delta;
           if (!d) continue;
           const parts = [];
@@ -279,8 +295,11 @@ textarea:focus { border-color: var(--ink); outline: none; }
         }
       }
     } catch (e) {
-      if (e.name !== "AbortError") error = "The model stopped answering (" + (e.message || e) + "). Is Tlav still running? Try `tlav status`.";
+      if (e.name !== "AbortError") error = /too long/.test(e.message || "") ? "That message is too long for this model's memory. Shorten it or send it in parts."
+        : "The model isn't answering (" + (e.message || e) + "). " + restartHint;
     }
+    if (!error && !finished && !ctrl.signal.aborted && (answer || reasoning)) error = "The answer was cut off: the model stopped responding. " + restartHint;
+    else if (!error && hitLimit && answer) a.meta.appendChild(el("span", null, "reached its length limit; ask it to continue"));
     clearInterval(tick);
     busy = null; setBusy(false);
     pen.remove(); a.mark.classList.remove("moving"); a.verb.textContent = ""; a.secs.textContent = "";
@@ -327,6 +346,7 @@ textarea:focus { border-color: var(--ink); outline: none; }
     }
     $("model").textContent = [cfg.model, cfg.quant].filter(Boolean).join(" · ") || "local model";
     $("where").textContent = `Offline · on ${cfg.where}`;
+    if (/computers/.test(cfg.where)) restartHint = "In a cluster this usually means a worker computer went offline: check `tlav cluster list`, start `tlav worker` there again, then type `tlav`.";
     if (cfg.reasons) {
       $("thinkWrap").hidden = false;
       let saved = null; try { saved = localStorage.getItem("tlav.think"); } catch (e) {}

@@ -287,6 +287,16 @@ def parse_command(line: str) -> Tuple[str, str]:
     return name.lower().strip(), arg.strip()
 
 
+def shorten(text: str, max_tokens: int, chars_per_token: float = 3.0) -> str:
+    """Keep the start and the end of a message that is too long for the model's memory."""
+    keep = max(200, int(max_tokens * chars_per_token))
+    if len(text) <= keep:
+        return text
+    head = int(keep * 0.7)
+    return text[:head] + "\n\n[… the middle of this message was left out to fit the model's memory …]\n\n" \
+        + text[-(keep - head):]
+
+
 def safe_name(name: str) -> str:
     return re.sub(r"[^A-Za-z0-9._-]+", "-", name).strip("-.")[:60] or "chat"
 
@@ -301,6 +311,14 @@ class Answer:
         self.tps = 0.0
         self.seconds = 0.0
         self.stopped = False
+        self.finished = False   # the server said the answer is complete
+        self.hit_limit = False  # ...because it reached the length limit
+
+    @property
+    def cut(self) -> bool:
+        """The stream ended without the server finishing the answer (it crashed, or a cluster
+        worker dropped out) and not because the user pressed Ctrl+C."""
+        return not self.finished and not self.stopped
 
 
 def stream(url: str, messages: List[dict], temperature: float, max_tokens: int, think: Optional[bool],
@@ -333,6 +351,9 @@ def stream(url: str, messages: List[dict], temperature: float, max_tokens: int, 
                 choices = chunk.get("choices") or []
                 if not choices:
                     continue
+                if choices[0].get("finish_reason"):
+                    ans.finished = True
+                    ans.hit_limit = choices[0]["finish_reason"] == "length"
                 delta = choices[0].get("delta") or {}
                 parts = []
                 if delta.get("reasoning_content"):
@@ -414,6 +435,10 @@ class Chat:
         prompt, dropped = trim_history(self.messages, self.ctx, budget)
         if dropped:
             print(dim(f"  (oldest {dropped} messages left out so the model has room to answer)"))
+        room = self.ctx - budget - estimate_tokens(prompt[:-1]) - 16
+        if estimate_tokens(prompt[-1:]) > room:
+            prompt[-1] = dict(prompt[-1], content=shorten(prompt[-1]["content"], room))
+            print(dim("  (your message is longer than this model can hold at once; Tlav kept its start and end)"))
         state = {"kind": None}
         mark = Mark()
 
@@ -432,16 +457,36 @@ class Chat:
 
         mark.start("  ")   # the square starts moving the moment you press Enter
         try:
-            ans = stream(self.url, prompt, self.temperature, budget,
-                         self.think if self.reasons else None, on_text)
+            try:
+                ans = stream(self.url, prompt, self.temperature, budget,
+                             self.think if self.reasons else None, on_text)
+            except urllib.error.HTTPError as e:
+                if e.code != 400:
+                    raise
+                # still too long for the model (our token estimate was low): try once with half
+                prompt[-1] = dict(prompt[-1], content=shorten(prompt[-1]["content"], max(64, room // 2), 2.0))
+                ans = stream(self.url, prompt, self.temperature, budget,
+                             self.think if self.reasons else None, on_text)
+        except urllib.error.HTTPError as e:
+            mark.stop()
+            self.messages.pop()
+            print("\n  " + ("That message is too long for this model's memory. Shorten it or send it in parts."
+                            if e.code == 400 else f"The model returned an error ({e.code})."))
+            return
         except (urllib.error.URLError, ConnectionError, OSError) as e:
             mark.stop()
             self.messages.pop()
-            print(f"\n  The model stopped answering ({e}). Is it still running? Try `tlav status`.")
+            gone = not server.healthy(self.url)
+            print("\n  " + ("The model isn't running any more. " if gone else f"The model isn't answering ({e}). ")
+                  + self._restart_hint())
             return
         finally:
             mark.stop()
         print()
+        if ans.cut and (ans.text or ans.reasoning or ans.tokens):
+            print("  " + accent("!") + " The answer was cut off: the model stopped responding. " + self._restart_hint())
+        elif ans.hit_limit and ans.text:
+            print(dim("  (the answer reached its length limit; ask it to continue)"))
         if ans.text:
             self.messages.append({"role": "assistant", "content": ans.text})
             self.last = ans.text
@@ -454,6 +499,12 @@ class Chat:
             self.speeds.append(ans.tps)
         stop = " · stopped" if ans.stopped else ""
         print(dim(f"  {ans.tokens} tokens · {ans.tps:.1f} tokens/s · {ans.seconds:.1f}s{stop}") + "\n")
+
+    def _restart_hint(self) -> str:
+        if str(self.info.get("where", "")).endswith("computers"):
+            return ("In a cluster this usually means a worker computer went offline: check `tlav cluster list`, "
+                    "start `tlav worker` there again, then type `tlav`.")
+        return "Type `tlav` to start it again (or `tlav status` to check it)."
 
     # -- commands
     def command(self, name: str, arg: str) -> bool:
@@ -566,7 +617,11 @@ class Chat:
             self.ask(arg)
         self.autosave()
         if not self.stopped:
-            print(dim("  Bye. The model keeps running in the background: `tlav` brings you back, `tlav stop` frees its memory."))
+            if server.healthy(self.url):
+                print(dim("  Bye. The model keeps running in the background: `tlav` brings you back, "
+                          "`tlav stop` frees its memory."))
+            else:
+                print(dim("  Bye. The model has stopped; type `tlav` to start it again."))
 
 
 # ------------------------------------------------------------------ small system helpers
@@ -630,8 +685,13 @@ def running_info(status: Dict) -> Dict:
     active = status.get("active") or {}
     path = status.get("model_path")
     if not path or (active.get("path") and Path(active["path"]).resolve() == Path(path).resolve()):
-        return model_info(active)
-    return file_info(path, ctx=status.get("ctx"))
+        info = model_info(active)
+    else:
+        info = file_info(path, ctx=status.get("ctx"))
+    rpc = config.load_state().get("server_rpc")
+    if rpc:
+        info["where"] = f"{len(rpc) + 1} computers"
+    return info
 
 
 def model_info(active: Optional[dict]) -> Dict:
