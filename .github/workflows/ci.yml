@@ -6,9 +6,12 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        python: ["3.8", "3.12"]
-        exclude:
-          - os: macos-latest
+        python: ["3.12"]
+        include:
+          # The oldest supported Python; newer runner images no longer ship 3.8.
+          - os: ubuntu-22.04
+            python: "3.8"
+          - os: windows-latest
             python: "3.8"
     runs-on: ${{ matrix.os }}
     steps:
@@ -46,7 +49,7 @@ jobs:
           tlav compress --file "$TLAV_HOME/models/Qwen2.5-0.5B-Instruct-f16.gguf" --to Q4_K_M --kv-check
       - name: Serve on one PC, then across a 3-machine cluster, and compare answers
         run: |
-          M="$TLAV_HOME/models/Qwen2.5-0.5B-Instruct-Q4_K_M.gguf"
+          M=$(ls "$TLAV_HOME"/models/Qwen2.5-0.5B-Instruct-Q4_K_M*.gguf | head -1)   # -imat when that measured closer
           ask() { curl -s "http://127.0.0.1:$1/v1/chat/completions" -H "Content-Type: application/json" \
             -d '{"messages":[{"role":"user","content":"Name three planets."}],"max_tokens":40,"temperature":0}' \
             | python -c "import json,sys; print(json.load(sys.stdin)['choices'][0]['message']['content'])"; }
