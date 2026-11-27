@@ -293,6 +293,9 @@ def _obtain_model(plan, hw, local_compress: bool, files: Optional[dict] = None, 
             plan.ctx = fit[1]
             return Path(res["path"])
         print("  (no room for an exact-fit build; using a ready-made file)")
+    local = _local_model_file(plan, files)
+    if local and not local_compress:
+        return local                     # already here: works offline, no network call
     if files:  # --hf repo
         fn = files[plan.quant.name]
         print(f"Downloading {fn} ...")
@@ -450,16 +453,23 @@ def cmd_setup(args):
     _open_where(config.load_state()["server_url"], "web" if args.web else _ask_where())
 
 
-def _model_file_present(plan, files) -> bool:
-    """Is the chosen ready-made file already downloaded? (No network needed to answer.)"""
+def _local_model_file(plan, files=None) -> Optional[Path]:
+    """The chosen ready-made file, if it's already downloaded (no network needed to answer)."""
     import re as _re
-    name = plan.quant.name
-    for f in config.models_dir().glob("*.gguf"):
-        stem = f.stem.lower().replace("_", "-")
-        model = _re.sub(r"[^a-z0-9.]+", "-", plan.model.name.lower())
-        if name.lower() in f.name.lower() and model.replace(" ", "-") in stem:
-            return True
-    return False
+    if files and plan.quant.name in files:              # --hf: we know the exact file name
+        f = config.models_dir() / files[plan.quant.name]
+        return f if f.exists() and hub._looks_like_gguf(f) else None
+    model = _re.sub(r"[^a-z0-9.]+", "-", plan.model.name.lower()).strip("-")
+    names = [f.name for f in config.models_dir().glob("*.gguf")
+             if model in f.stem.lower().replace("_", "-") and ".imatrix." not in f.name]
+    hit = hub.find_quant_file(names, plan.quant.name)
+    if hit and hub._looks_like_gguf(config.models_dir() / hit):
+        return config.models_dir() / hit
+    return None
+
+
+def _model_file_present(plan, files) -> bool:
+    return _local_model_file(plan, files) is not None
 
 
 def _ask_where(default: str = "terminal") -> str:
