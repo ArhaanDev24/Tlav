@@ -90,7 +90,7 @@ code { font-family: var(--mono); font-size: .92em; }
 .mobile-menu a { padding: 16px 0; font-size: 22px; letter-spacing: -0.02em; text-decoration: none; border-bottom: 1px solid var(--line); }
 
 /* ---------- hero ---------- */
-.hero { --hp: 0; --ink: #eef3e8; --muted: #a9b8a3; --line: #2c4433; color: var(--ink); background: var(--night); position: relative; overflow: hidden; min-height: min(calc(100svh - 68px - env(safe-area-inset-top, 0px)), 980px); --sc: clamp(130px, 13vw, 190px); display: flex; flex-direction: column; justify-content: center; padding-block: clamp(56px, 8vw, 110px) clamp(90px, 10vw, 140px); }
+.hero { --hp: 0; --ink: #eef3e8; --muted: #a9b8a3; --line: #2c4433; color: var(--ink); background: var(--night); position: relative; overflow: hidden; min-height: min(calc(100svh - 68px - env(safe-area-inset-top, 0px)), 980px); --sc: clamp(96px, min(13vw, 20svh), 190px); display: flex; flex-direction: column; justify-content: center; padding-block: clamp(40px, min(8vw, 7svh), 110px) clamp(64px, min(10vw, 10svh), 140px); }
 .field { position: absolute; inset: 0; cursor: crosshair; }
 .field canvas { width: 100%; height: 100%; display: block; -webkit-mask-image: linear-gradient(90deg, transparent 34%, #000 60%); mask-image: linear-gradient(90deg, transparent 34%, #000 60%); }
 @media (max-width: 720px) { .field canvas { -webkit-mask-image: linear-gradient(180deg, transparent 48%, #000 78%); mask-image: linear-gradient(180deg, transparent 48%, #000 78%); } }
@@ -419,6 +419,28 @@ footer a:hover { color: var(--ink); }
   .msg { max-width: 92%; font-size: 14px; }
   .layers { grid-template-columns: repeat(24, minmax(0, 1fr)); }
 }
+/* Short screens (small laptops with a browser toolbar): tighten the terminal so the hero still fits */
+@media (max-height: 720px) and (min-width: 961px) {
+  .term-body { line-height: 1.6; padding: 12px 16px 14px; }
+  .hero { padding-block: 32px 60px; --sc: clamp(96px, 17svh, 150px); }
+}
+/* Phones turned sideways: a smaller headline so the intro fits the short screen */
+@media (max-height: 500px) and (orientation: landscape) {
+  .hero { padding-block: 28px 72px; }
+  .hero h1 { font-size: min(11vw, 17svh); }
+  .hero .meta { margin-top: 18px; gap: 18px; }
+  .hero .lead { font-size: 16px; }
+}
+/* Older Safari (before 16.2) has no color-mix(): the same colours, pre-mixed */
+@supports not (color: color-mix(in srgb, red 50%, blue)) {
+  .nav { background: rgba(234, 240, 227, .88); }
+  .nav.on-dark { background: rgba(36, 69, 47, .92); }
+  .hero .btn.ghost { box-shadow: inset 0 0 0 1px rgba(238, 243, 232, .45); }
+  .band .row:nth-child(even) { color: #a75d36; }
+  .layers i.b { background: #9fb4a1; }
+}
+/* Older Safari (before 16) has no overflow: clip; stop sideways scrolling another way */
+@supports not (overflow: clip) { html { overflow-x: hidden; } }
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
   *, *::before, *::after { animation: none !important; transition: none !important; }
