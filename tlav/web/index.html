@@ -42,6 +42,11 @@ header { display: flex; align-items: center; gap: 12px; padding: 12px max(16px, 
 .tools { margin-left: auto; display: flex; gap: 8px; align-items: center; flex: none; }
 .btn { border: 1px solid var(--line); background: var(--surface); padding: 6px 12px; border-radius: 0; font-size: 14px; min-height: 36px; }
 .btn:hover { border-color: var(--ink); }
+.btn.icon { width: 36px; padding: 0; display: inline-grid; place-items: center; }
+.btn.icon svg { width: 15px; height: 15px; shape-rendering: crispEdges; }
+.btn.icon .sun { display: none; }
+.dark-now .btn.icon .sun { display: block; }
+.dark-now .btn.icon .moon { display: none; }
 .toggle { display: flex; align-items: center; gap: 6px; font-size: 14px; color: var(--muted); user-select: none; }
 .toggle input { accent-color: var(--pixel); width: 16px; height: 16px; }
 
@@ -99,6 +104,7 @@ textarea:focus { border-color: var(--ink); outline: none; }
   <div class="model" id="model">local model</div>
   <div class="tools">
     <label class="toggle" id="thinkWrap" hidden><input type="checkbox" id="think"> Reasoning</label>
+    <button class="btn icon" id="themeBtn" type="button" aria-label="Switch to dark mode" title="Dark or white"><svg viewBox="0 0 8 8" aria-hidden="true"><path class="moon" fill="currentColor" d="M3 0h3v1H4v1H3v4h1v1h2v1H3V7H2V6H1V2h1V1h1z"/><path class="sun" fill="currentColor" d="M3 0h2v1H3zM3 7h2v1H3zM0 3h1v2H0zM7 3h1v2H7zM2 2h4v4H2zM1 1h1v1H1zM6 1h1v1H6zM1 6h1v1H1zM6 6h1v1H6z"/></svg></button>
     <button class="btn" id="newChat" type="button">New chat</button>
   </div>
 </header>
@@ -362,6 +368,22 @@ textarea:focus { border-color: var(--ink); outline: none; }
   btn.addEventListener("click", () => { if (busy) busy.abort(); });
   $("newChat").addEventListener("click", () => { if (busy) busy.abort(); messages = messages.filter((m) => m.role === "system"); save(); render(); input.focus(); });
   $("think").addEventListener("change", (e) => { think = e.target.checked; try { localStorage.setItem("tlav.think", think ? "1" : "0"); } catch (x) {} });
+
+  // ---------- white or dark: follows the system until the button picks one (remembered)
+  const rootEl = document.documentElement, darkMq = matchMedia("(prefers-color-scheme: dark)");
+  const isDark = () => rootEl.dataset.theme ? rootEl.dataset.theme === "dark" : darkMq.matches;
+  const themeShown = () => {
+    rootEl.classList.toggle("dark-now", isDark());
+    $("themeBtn").setAttribute("aria-label", isDark() ? "Switch to white" : "Switch to dark mode");
+  };
+  try { const saved = localStorage.getItem("tlav.chat.theme"); if (saved === "dark" || saved === "light") rootEl.dataset.theme = saved; } catch (e) {}
+  $("themeBtn").addEventListener("click", () => {
+    rootEl.dataset.theme = isDark() ? "light" : "dark";
+    try { localStorage.setItem("tlav.chat.theme", rootEl.dataset.theme); } catch (e) {}
+    themeShown();
+  });
+  if (darkMq.addEventListener) darkMq.addEventListener("change", themeShown);
+  themeShown();
 
   // ---------- background: slow pixel field, kept clear of the reading column
   (() => {
