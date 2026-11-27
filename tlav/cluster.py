@@ -17,6 +17,7 @@ router. The optional discovery token only prevents accidental joins.
 
 import hmac
 import json
+import signal
 import socket
 import subprocess
 import threading
@@ -136,11 +137,25 @@ def run_worker(host: Optional[str] = None, port: int = RPC_PORT, token: Optional
           f"{host}{'' if port == RPC_PORT else ':' + str(port)})")
     print("  Only use this on a trusted home network. Ctrl+C to stop.\n")
     proc = subprocess.Popen(cmd)
+
+    # Stop the engine however the worker is stopped (Ctrl+C, closing the window, `kill`), so it
+    # never keeps sharing this computer in the background on its own.
+    def _quit(signum, frame):
+        raise KeyboardInterrupt
+    for name in ("SIGTERM", "SIGHUP"):
+        if hasattr(signal, name):
+            signal.signal(getattr(signal, name), _quit)
     try:
         proc.wait()
     except KeyboardInterrupt:
-        proc.terminate()
+        pass
     finally:
+        if proc.poll() is None:
+            proc.terminate()
+            try:
+                proc.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                proc.kill()
         responder.stop()
 
 
