@@ -18,12 +18,12 @@ Requires Python 3.8+ and nothing else. On first setup Tlav builds [llama.cpp](ht
 
 **macOS / Linux**
 ```bash
-git clone https://github.com/ArhaanDev24/Tlavv && cd Tlavv && ./install.sh
+git clone https://github.com/ArhaanDev24/Tlav && cd Tlav && ./install.sh
 ```
 
 **Windows (PowerShell)**
 ```powershell
-git clone https://github.com/ArhaanDev24/Tlavv; cd Tlavv; ./install.ps1
+git clone https://github.com/ArhaanDev24/Tlav; cd Tlav; ./install.ps1
 ```
 
 ### Intel Macs (2010–2020), including the 2013 iMac

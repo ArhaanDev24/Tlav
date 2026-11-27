@@ -1,7 +1,7 @@
 # Tlav installer for Windows. Creates %USERPROFILE%\.tlav\venv.
 $ErrorActionPreference = "Stop"
 $TlavHome = if ($env:TLAV_HOME) { $env:TLAV_HOME } else { Join-Path $env:USERPROFILE ".tlav" }
-$RepoUrl = if ($env:TLAV_REPO) { $env:TLAV_REPO } else { "https://github.com/ArhaanDev24/Tlavv" }
+$RepoUrl = if ($env:TLAV_REPO) { $env:TLAV_REPO } else { "https://github.com/ArhaanDev24/Tlav" }
 
 $py = Get-Command python -ErrorAction SilentlyContinue
 if (-not $py) { Write-Error "Python 3.8+ is required: https://www.python.org/downloads/windows/"; exit 1 }

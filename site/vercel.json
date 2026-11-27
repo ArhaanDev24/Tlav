@@ -4,7 +4,7 @@
   "trailingSlash": false,
   "ignoreCommand": "git diff --quiet HEAD^ HEAD -- .",
   "redirects": [
-    { "source": "/github", "destination": "https://github.com/ArhaanDev24/Tlavv", "permanent": false }
+    { "source": "/github", "destination": "https://github.com/ArhaanDev24/Tlav", "permanent": false }
   ],
   "headers": [
     {

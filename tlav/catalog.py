@@ -87,7 +87,7 @@ class Model:
 KV_BYTES = {"f16": 2.0, "q8_0": 34 / 32}
 
 CATALOG_URL = os.environ.get(
-    "TLAV_CATALOG_URL", "https://raw.githubusercontent.com/ArhaanDev24/Tlavv/main/tlav/data/catalog.json")
+    "TLAV_CATALOG_URL", "https://raw.githubusercontent.com/ArhaanDev24/Tlav/main/tlav/data/catalog.json")
 
 
 def _years(released: Optional[str]) -> Optional[float]:
