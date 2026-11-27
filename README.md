@@ -139,6 +139,16 @@ If your network blocks discovery, add a worker by address: `tlav cluster add 192
 
 ---
 
+
+While computers connect, and while the model's layers travel to each worker, Tlav draws each link live in the terminal. A packet glides from **this PC** to the worker, then the line settles into a solid connection with its speed:
+
+```
+  ■ this PC ━━━━━━━━━━━━━━━━━━━━━━ ■ study-imac   0.4 ms, excellent (wired) · 16 GB RAM, 4 cores
+```
+
+Tlav also checks the details that break clusters:
+- **Engine versions:** every computer must run the same AI engine build, so Tlav warns and tells you how to fix it if they differ.
+- **Changed addresses:** if a router hands a worker a new address, Tlav finds it again by its computer name.
 ## How Tlav finds the best model
 
 This is Tlav's core job, and it does it like a careful researcher would:

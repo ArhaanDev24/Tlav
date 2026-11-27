@@ -77,3 +77,45 @@ def test_tuner_cluster_args():
 def test_network_advice():
     assert "wired" in cluster.network_advice(0.4)
     assert "Ethernet" in cluster.network_advice(20)
+
+
+def test_link_animation_draws_and_settles(capsys):
+    import re
+    import time
+    from tlav import anim
+    links = anim.Links([("this PC", "study-imac"), ("this PC", "attic-pc")], "connecting", enabled=True).start()
+    time.sleep(0.25)
+    links.done(0, "connected · 0.4 ms")
+    links.done(1, "no answer", ok=False)
+    links.finish()
+    out = re.sub(r"\x1b\[[0-9;]*m", "", capsys.readouterr().out)
+    assert "connecting…" in out and "■" in out            # a packet was drawn while connecting
+    assert "━" in out and "╌" in out                       # settled: solid when ok, dashed when not
+    assert "connected · 0.4 ms" in out and "no answer" in out
+
+
+def test_link_plain_output_without_terminal(capsys):
+    from tlav import anim
+    links = anim.Links([("this PC", "pc2")], "connecting", enabled=False).start()
+    links.finish("connected")
+    assert capsys.readouterr().out == "  this PC -> pc2: connected\n"
+
+
+def test_engine_mismatch(monkeypatch):
+    from tlav import runtime
+    monkeypatch.setattr(runtime, "engine_version", lambda: "aaa111")
+    assert cluster.engine_mismatch({"endpoint": "x:1", "engine": "aaa111"}) is None
+    assert cluster.engine_mismatch({"endpoint": "x:1"}) is None             # older worker: unknown
+    assert "install-runtime" in cluster.engine_mismatch({"endpoint": "x:1", "hostname": "pc2", "engine": "bbb222"})
+
+
+def test_relocate_follows_worker_by_name(monkeypatch):
+    saved = [{"hostname": "attic-pc", "endpoint": "192.168.1.20:50052"}]
+    store = {"w": saved}
+    monkeypatch.setattr(cluster, "saved_workers", lambda: store["w"])
+    monkeypatch.setattr(cluster, "save_workers", lambda w: store.update(w=w))
+    monkeypatch.setattr(cluster, "scan", lambda **kw: [{"hostname": "attic-pc", "endpoint": "192.168.1.31:50052"}])
+    monkeypatch.setattr(cluster, "reachable", lambda w: 0.4)
+    moved = cluster.relocate(saved)
+    assert moved == {"192.168.1.20:50052": "192.168.1.31:50052"}
+    assert store["w"][0]["endpoint"] == "192.168.1.31:50052"

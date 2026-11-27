@@ -84,6 +84,26 @@ def help_text(tool: str) -> str:
     return _HELP_CACHE[tool]
 
 
+_ENGINE: Optional[str] = None
+
+
+def engine_version() -> str:
+    """The installed llama.cpp build (its git commit), e.g. '8c64180'; '' if unknown.
+    Computers in a cluster must run the same build: the network protocol changes between them."""
+    global _ENGINE
+    if _ENGINE is None:
+        _ENGINE = ""
+        exe = find("llama-server") or find("llama-cli")
+        if exe:
+            try:
+                out = subprocess.run([exe, "--version"], capture_output=True, text=True, timeout=20)
+                m = re.search(r"commit\s+([0-9a-f]{6,})", out.stdout + out.stderr)
+                _ENGINE = m.group(1) if m else ""
+            except (OSError, subprocess.SubprocessError):
+                pass
+    return _ENGINE
+
+
 def status() -> Dict[str, Optional[str]]:
     return {t: find(t) for t in TOOLS}
 

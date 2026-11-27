@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 from typing import List, Optional
 
-from . import (__version__, benchmark, catalog, chat, cluster, compress, config, discover, finder, gguf,
+from . import (__version__, anim, benchmark, catalog, chat, cluster, compress, config, discover, finder, gguf,
                hardware, hub, planner, runtime, server, service, tuner, web)
 
 
@@ -455,6 +455,26 @@ def _plan_for_file(path: Path, nodes, kv: str, force_split: bool = False) -> Opt
     return plan
 
 
+def _reconnect(s: dict) -> None:
+    """Make sure every worker of a cluster plan answers; follow workers whose address changed."""
+    down = [e for e in s["rpc"] if cluster.ping(e, tries=1) is None]
+    if not down:
+        return
+    print("Looking for cluster workers that moved to a new address...")
+    moved = cluster.relocate([w for w in cluster.saved_workers() if w["endpoint"] in down])
+    if moved:
+        s["rpc"] = [moved.get(e, e) for e in s["rpc"]]
+        state = config.load_state()
+        if state.get("active", {}).get("settings", {}).get("rpc"):
+            state["active"]["settings"]["rpc"] = s["rpc"]
+            config.save_state(active=state["active"])
+        for old, new in moved.items():
+            print(f"  {old} is now at {new}")
+    still = [e for e in s["rpc"] if cluster.ping(e, tries=1) is None]
+    if still:
+        sys.exit(f"Cluster worker(s) not reachable: {', '.join(still)}. Start `tlav worker` there first.")
+
+
 def _launch(model_path, s, host, port, browser, draft=None, detach=False, quiet=False, info=None):
     if info is None:
         active = config.load_state().get("active") or {}
@@ -467,8 +487,22 @@ def _launch(model_path, s, host, port, browser, draft=None, detach=False, quiet=
     print(f"Loading {Path(model_path).name}"
           + (f" across {len(s['rpc']) + 1} computers" if s.get("rpc") else "")
           + " (first load can take a few minutes on old disks/networks)...")
-    proc = server.start(args, detach=detach)
+    if s.get("rpc"):
+        # the layers travel to each worker: show it, one moving link per computer
+        saved_w = cluster.saved_workers()
+        names = {w["endpoint"]: cluster.display_name(w, saved_w) for w in saved_w}
+        links = anim.Links([("this PC", names.get(e, e)) for e in s["rpc"]], "sending its layers").start()
+        try:
+            proc = server.start(args, detach=detach)
+        except RuntimeError as e:
+            links.finish("failed", ok=False)
+            raise RuntimeError(f"{e}\n  If the computers run different AI engine builds, run `tlav install-runtime` "
+                               "on each so they match.") from None
+        links.finish("ready · layers loaded")
+    else:
+        proc = server.start(args, detach=detach)
     url = config.load_state()["server_url"]
+    port = int(url.rsplit(":", 1)[1])   # may differ from the one asked for if it was busy
     if quiet:
         return proc
     print(f"\nReady!  Web chat: {url}   OpenAI-compatible API: {url}/v1")
@@ -511,9 +545,7 @@ def cmd_run(args):
     if args.cluster and not s.get("rpc"):
         sys.exit("The set-up model runs on this PC alone. Re-run `tlav setup --cluster` to plan a cluster.")
     if s.get("rpc"):
-        down = [e for e in s["rpc"] if cluster.ping(e, tries=1) is None]
-        if down:
-            sys.exit(f"Cluster worker(s) not reachable: {', '.join(down)}. Start `tlav worker` there first.")
+        _reconnect(s)
     draft = active.get("draft_path") if not args.no_draft else None
     _launch(active["path"], s, args.host, args.port, not args.no_browser, draft=draft, detach=args.detach)
 
@@ -552,9 +584,7 @@ def _start_active(port: int = 8080, host: str = "127.0.0.1") -> str:
         sys.exit(f"The model file is missing ({active['path']}). Run `tlav setup` again.")
     s = active["settings"]
     if s.get("rpc"):
-        down = [e for e in s["rpc"] if cluster.ping(e, tries=1) is None]
-        if down:
-            sys.exit(f"Cluster worker(s) not reachable: {', '.join(down)}. Start `tlav worker` there first.")
+        _reconnect(s)
     _launch(active["path"], s, host, port, False, draft=active.get("draft_path"), detach=True, quiet=True)
     return config.load_state()["server_url"]
 
@@ -604,26 +634,33 @@ def cmd_worker(args):
 
 def cmd_cluster(args):
     if args.action == "scan":
-        print("Looking for Tlav workers on your network...")
+        print("Looking for Tlav workers on your network...\n")
+        search = anim.Links([("this PC", "your network")], "searching").start()
         found = cluster.scan(timeout=args.timeout, token=args.token, port=args.discovery_port)
+        search.finish(f"{len(found)} answered" if found else "nobody answered", ok=bool(found))
         if not found:
-            print("None found. Make sure `tlav worker` runs on the other PCs, or add one by IP:\n"
+            print("\nMake sure `tlav worker` runs on the other PCs, or add one by IP:\n"
                   "  tlav cluster add 192.168.1.23")
             return
-        saved = []
-        for w in found:
+        links = anim.Links([("this PC", cluster.display_name(w, found)) for w in found], "connecting").start()
+        saved, notes = [], []
+        for i, w in enumerate(found):
             lat = cluster.reachable(w)
             w.pop("candidates", None)
             if lat is None:
-                print(f"  {w.get('hostname', '?'):<20} answered, but its engine at {w['endpoint']} is not reachable "
-                      "(firewall? TCP 50052)")
+                links.done(i, "answered, but its engine port is closed (firewall? TCP 50052)", ok=False)
                 continue
             w["latency_ms"] = lat
             hw = w.get("hardware") or {}
-            print(f"  {w['hostname']:<20} {w['endpoint']:<22} {hw.get('ram_total_gb', 0):>5.0f} GB RAM  "
-                  f"{hw.get('physical_cores', '?')} cores  {w['latency_ms']:.1f} ms "
-                  f"({cluster.network_advice(w['latency_ms'])})")
+            links.done(i, f"{lat:.1f} ms, {cluster.network_advice(lat)} · {hw.get('ram_total_gb', 0):.0f} GB RAM, "
+                          f"{hw.get('physical_cores', '?')} cores")
             saved.append(w)
+            warn = cluster.engine_mismatch(w)
+            if warn:
+                notes.append(warn)
+        links.finish()
+        for n in notes:
+            print("\n  ! " + n)
         others = [x for x in cluster.saved_workers() if x["endpoint"] not in {w["endpoint"] for w in saved}]
         cluster.save_workers(others + saved)
         if saved:
@@ -631,9 +668,17 @@ def cmd_cluster(args):
     elif args.action == "add":
         if not args.address:
             sys.exit("Usage: tlav cluster add IP[:PORT]")
-        w = cluster.add_worker(args.address, token=args.token, port=args.discovery_port)
-        print(f"Added {w['hostname']} at {w['endpoint']} ({w['latency_ms']:.1f} ms, "
-              f"{cluster.network_advice(w['latency_ms'])})")
+        link = anim.Links([("this PC", args.address)], "connecting").start()
+        try:
+            w = cluster.add_worker(args.address, token=args.token, port=args.discovery_port)
+        except ConnectionError:
+            link.finish("no answer", ok=False)
+            raise
+        link.finish(f"connected · {w['latency_ms']:.1f} ms, {cluster.network_advice(w['latency_ms'])}")
+        print(f"\nAdded {w['hostname']} at {w['endpoint']}. Now: `tlav recommend --cluster` or `tlav setup --cluster`.")
+        warn = cluster.engine_mismatch(w)
+        if warn:
+            print("  ! " + warn)
         if not w.get("hardware"):
             print("  (worker did not answer discovery; assuming 8 GB RAM. Open UDP 50053 for exact info.)")
     elif args.action == "remove":
@@ -645,12 +690,16 @@ def cmd_cluster(args):
         workers = cluster.saved_workers()
         if not workers:
             print("No workers saved. Run `tlav worker` on other PCs, then `tlav cluster scan`.")
-        for w in workers:
-            lat = cluster.ping(w["endpoint"], tries=1)
-            state = (f"online, {lat:.1f} ms" if lat is not None
-                     else "not answering (offline, or busy serving a running model)")
-            ram = (w.get("hardware") or {}).get("ram_total_gb", "?")
-            print(f"  {w.get('hostname', '?'):<20} {w['endpoint']:<22} {ram} GB RAM  {state}")
+        if workers:
+            links = anim.Links([("this PC", cluster.display_name(w, workers)) for w in workers], "checking").start()
+            for i, w in enumerate(workers):
+                lat = cluster.ping(w["endpoint"], tries=1)
+                ram = (w.get("hardware") or {}).get("ram_total_gb", "?")
+                if lat is not None:
+                    links.done(i, f"online · {lat:.1f} ms · {w['endpoint']} · {ram} GB RAM")
+                else:
+                    links.done(i, f"not answering · {w['endpoint']} (offline, or busy running a model)", ok=False)
+            links.finish()
 
 
 def cmd_service(args):

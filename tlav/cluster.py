@@ -69,7 +69,17 @@ def parse(data: bytes) -> Optional[dict]:
 
 def worker_info(rpc_host: str, rpc_port: int, hw: hardware.Hardware, gbps: float) -> dict:
     return {"hostname": socket.gethostname(), "rpc_host": rpc_host, "rpc_port": rpc_port,
-            "version": __version__, "hardware": hw.to_dict(), "gbps": round(gbps, 2)}
+            "version": __version__, "engine": runtime.engine_version(), "hardware": hw.to_dict(),
+            "gbps": round(gbps, 2)}
+
+
+def engine_mismatch(worker: dict) -> Optional[str]:
+    """A warning if the worker runs a different llama.cpp build (they can't work together)."""
+    theirs, ours = worker.get("engine"), runtime.engine_version()
+    if theirs and ours and theirs != ours:
+        return (f"{worker.get('hostname', worker['endpoint'])} runs AI engine build {theirs}, this PC runs {ours}. "
+                "Different builds can't share a model: run `tlav install-runtime` on both so they match.")
+    return None
 
 
 # ------------------------------------------------------------------ worker side
@@ -113,7 +123,10 @@ def run_worker(host: Optional[str] = None, port: int = RPC_PORT, token: Optional
     if cache:
         cmd.append("-c")  # keep received weights on disk so the next load is fast
     if mem_mb:
-        cmd += ["-m", str(mem_mb)]
+        if "--mem" in runtime.help_text("rpc-server") or " -m," in runtime.help_text("rpc-server"):
+            cmd += ["-m", str(mem_mb)]
+        else:
+            print("  (this AI engine build can't limit shared memory; --mem is ignored)")
     info = worker_info(host, port, hw, gbps)
     responder = DiscoveryResponder(info, token, discovery_port)
     responder.start()
@@ -220,6 +233,36 @@ def add_worker(address: str, token: Optional[str] = None, port: int = DISCOVERY_
     workers = [x for x in saved_workers() if x["endpoint"] != w["endpoint"]] + [w]
     save_workers(workers)
     return w
+
+
+def relocate(workers: List[dict], timeout: float = 2.5, port: int = DISCOVERY_PORT) -> Dict[str, str]:
+    """Find saved workers whose address changed (routers reassign them) by their computer name.
+    Returns {old endpoint: new endpoint} and updates the saved list."""
+    found = scan(timeout=timeout, port=port)
+    by_name = {}
+    for w in found:
+        if reachable(w) is not None:
+            by_name.setdefault(w.get("hostname"), w)
+    moved = {}
+    saved = saved_workers()
+    for w in workers:
+        new = by_name.get(w.get("hostname"))
+        if new and new["endpoint"] != w["endpoint"]:
+            moved[w["endpoint"]] = new["endpoint"]
+    if moved:
+        for w in saved:
+            if w["endpoint"] in moved:
+                w["endpoint"] = moved[w["endpoint"]]
+        save_workers(saved)
+    return moved
+
+
+def display_name(worker: dict, workers: List[dict]) -> str:
+    """The computer's name; with its port added when two share a name (two workers on one PC)."""
+    name = worker.get("hostname") or worker["endpoint"]
+    if sum(1 for w in workers if (w.get("hostname") or w["endpoint"]) == name) > 1:
+        return f"{name} :{worker['endpoint'].rsplit(':', 1)[-1]}"
+    return name
 
 
 def remove_worker(endpoint: str) -> bool:
