@@ -72,12 +72,21 @@ header, form { position: relative; z-index: 2; }
 .think div { white-space: pre-wrap; margin-top: 6px; overflow-wrap: anywhere; }
 .text { background: var(--soft); padding: 12px 16px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .text:empty { display: none; }
+.text { position: relative; padding-right: 48px; }
+.text .copy { position: absolute; top: 8px; right: 8px; display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 8px;
+  border: 1px solid transparent; background: transparent; color: var(--muted); font: 12px var(--sans); cursor: pointer;
+  opacity: 0; transition: opacity .2s, background-color .2s, border-color .2s, color .2s; }
+.text .copy svg { width: 12px; height: 12px; shape-rendering: crispEdges; }
+.text .copy .copy-label { max-width: 0; overflow: hidden; white-space: nowrap; transition: max-width .25s var(--ease); }
+.text:hover .copy, .text .copy:focus-visible, .text .copy.done { opacity: 1; }
+.text .copy:hover, .text .copy:focus-visible, .text .copy.done { background: var(--surface); border-color: var(--line); color: var(--ink); }
+.text .copy:hover .copy-label, .text .copy:focus-visible .copy-label, .text .copy.done .copy-label { max-width: 90px; }
+.text .copy.done { color: var(--deep); }
+@media (hover: none) { .text .copy { opacity: .75; } }
 .text code { font: .92em var(--mono); background: var(--bg); padding: 1px 5px; }
 .text b { font-weight: 650; }
 .pen { display: inline-block; width: 11px; height: 11px; margin-left: 5px; vertical-align: -1px; }
 .meta { display: flex; gap: 12px; align-items: center; font: 12px var(--mono); color: var(--muted); }
-.meta button { border: 0; background: none; padding: 2px 0; color: var(--muted); font: 12px var(--sans); text-decoration: underline; text-underline-offset: 3px; }
-.meta button:hover { color: var(--ink); }
 .error { color: var(--danger); font-size: 14px; }
 .note { max-width: 780px; margin: 0 auto; padding: 0 16px; font-size: 13px; color: var(--muted); }
 
@@ -224,12 +233,19 @@ textarea:focus-visible { outline: none; }   /* the whole card shows focus instea
     wrap.append(head, text, meta);
     return { wrap, head, mark: m, verb: head.querySelector(".verb"), secs: head.querySelector(".secs"), text, meta };
   };
+  // Copy sits inside the answer bubble, top right (pixel icon; "Copied" for a moment after a click)
+  const COPY_ICON = '<svg viewBox="0 0 8 8" aria-hidden="true"><path fill="currentColor" d="M2 0h6v6H6V5h1V1H3v1H2zM0 2h6v6H0zM1 3v4h4V3z"/></svg>';
   const copyBtn = (getText) => {
-    const b = el("button", null, "Copy"); b.type = "button";
+    const b = el("button", "copy"); b.type = "button"; b.title = "Copy"; b.setAttribute("aria-label", "Copy answer");
+    b.innerHTML = COPY_ICON + '<span class="copy-label">Copy</span>';
+    const lbl = b.querySelector(".copy-label");
     b.addEventListener("click", async () => {
-      try { await navigator.clipboard.writeText(getText()); b.textContent = "Copied"; }
-      catch (e) { b.textContent = "Select and copy"; }
-      setTimeout(() => (b.textContent = "Copy"), 1400);
+      try { await navigator.clipboard.writeText(getText()); lbl.textContent = "Copied"; b.classList.add("done"); }
+      catch (e) {
+        lbl.textContent = "Select to copy";
+        const r = document.createRange(); r.selectNodeContents(b.parentElement); const s = getSelection(); s.removeAllRanges(); s.addRange(r);
+      }
+      setTimeout(() => { lbl.textContent = "Copy"; b.classList.remove("done"); }, 1500);
     });
     return b;
   };
@@ -242,7 +258,7 @@ textarea:focus-visible { outline: none; }   /* the whole card shows focus instea
       const a = aiBlock();
       a.text.innerHTML = md(m.content);
       if (m.stats) a.meta.appendChild(el("span", null, m.stats));
-      a.meta.appendChild(copyBtn(() => m.content));
+      a.text.appendChild(copyBtn(() => m.content));
       log.appendChild(a.wrap);
     }
     toBottom(true);
@@ -401,7 +417,7 @@ textarea:focus-visible { outline: none; }   /* the whole card shows focus instea
       const tps = timings && timings.predicted_per_second ? timings.predicted_per_second : (first ? n / Math.max(.01, (performance.now() - first) / 1000) : 0);
       const stats = `${tok} tokens · ${tps.toFixed(1)} tokens/s · ${secs.toFixed(1)}s${ctrl.signal.aborted ? " · stopped" : ""}`;
       a.meta.prepend(el("span", null, stats));
-      a.meta.appendChild(copyBtn(() => answer));
+      a.text.appendChild(copyBtn(() => answer));
       messages.push({ role: "assistant", content: answer, stats });
     } else {
       messages.pop();   // nothing came back: keep the question out of the history
