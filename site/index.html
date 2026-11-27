@@ -113,6 +113,14 @@ code { font-family: var(--mono); font-size: .92em; }
 .js .term { animation: fade 1s var(--ease) .5s both; }
 .term-bar { display: flex; align-items: center; gap: 10px; padding: 11px 16px; border-bottom: 1px solid #2b4433; font: 12px var(--mono); color: var(--muted); }
 .term-bar svg { width: 12px; height: 12px; }
+.term { position: relative; }
+.term-bar .cap { margin-left: auto; display: flex; align-items: center; gap: 10px; font-family: var(--sans); font-size: 12px; white-space: nowrap; }
+.term-bar .cap b { color: var(--ink); font-weight: 500; }
+.term-bar .dots { display: flex; gap: 5px; }
+.term-bar .dots i { width: 5px; height: 5px; background: #34503b; transition: background-color .3s; }
+.term-bar .dots i.on { background: var(--pixel); }
+/* the pixel sculpture sits on the terminal's top-right corner */
+.sculpt { --s: clamp(130px, 13vw, 190px); position: absolute; z-index: 1; width: var(--s); height: var(--s); right: 18px; top: calc(var(--s) * -1 + 14px); cursor: pointer; touch-action: pan-y; }
 .term-body { padding: 16px 18px 18px; font: 13px/1.75 var(--mono); color: #dfe7d8; white-space: pre-wrap; overflow-wrap: anywhere; }
 .term-body .l { display: block; min-height: 1.75em; }
 .term-body .dim { color: var(--muted); }
@@ -377,7 +385,9 @@ footer a:hover { color: var(--ink); }
   .menu-btn { display: inline-grid; place-items: center; }
   .hero .wrap { grid-template-columns: minmax(0, 1fr); }
   .term-body { font-size: 11.5px; padding: 14px; }
-  .term { margin-top: 8px; }
+  .term { margin-top: 118px; }
+  .sculpt { --s: 124px; right: 10px; }
+  .term-bar > span[aria-hidden] { display: none; }
   .hero { min-height: 0; padding-block: 56px 110px; }
   .hero h1 { font-size: 15vw; }
   .specs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -425,7 +435,8 @@ footer a:hover { color: var(--ink); }
         </div>
       </div>
       <figure class="term" id="term" aria-label="Tlav in a terminal: it measures a 16 GB machine, checks 51 models, picks Qwen3.5 9B, compresses it from 16.7 to 5.7 GB keeping 97.5% of its quality, and answers a question offline.">
-        <div class="term-bar" aria-hidden="true"><svg class="px" viewBox="0 0 4 4"><rect width="4" height="4" fill="#eef3e8"/><rect x="2" width="2" height="2" fill="var(--pixel)"/></svg><span>tlav · 2013 iMac, 16 GB</span></div>
+        <canvas class="sculpt" id="morph" role="img" aria-label="Pixels assembling into a chip, an upward arrow and the letters AI"></canvas>
+        <div class="term-bar"><svg class="px" viewBox="0 0 4 4" aria-hidden="true"><rect width="4" height="4" fill="#eef3e8"/><rect x="2" width="2" height="2" fill="var(--pixel)"/></svg><span aria-hidden="true">tlav · 2013 iMac, 16 GB</span><span class="cap"><b id="morphCap">your old hardware</b><span class="dots" aria-hidden="true"><i class="on"></i><i></i><i></i></span></span></div>
         <div class="term-body" id="termBody" aria-hidden="true"></div>
       </figure>
     </div>
@@ -632,6 +643,68 @@ footer a:hover { color: var(--ink); }
     for (const ch of text) { const s = document.createElement("span"); s.className = "ch"; s.textContent = ch; s.style.setProperty("--c", ci++); el.appendChild(s); }
   });
 
+  const ARROW = ["....#######", "....#######", ".......####", "......#####", ".....###.##", "....###..##", "...###...##", "..###......", ".###.......", "###........", "##........."];
+
+  /* ---------- hero sculpture: pixels morph chip → arrow → AI, in step with the terminal ---------- */
+  const SHAPES = [
+    { cap: "your old hardware", rows: [".#.#.#.#.#.", "###########", ".#.......#.", "##.#####.##", ".#.#...#.#.", "##.#.#.#.##", ".#.#...#.#.", "##.#####.##", ".#.......#.", "###########", ".#.#.#.#.#."] },
+    { cap: "upgraded by Tlav", rows: ARROW },
+    { cap: "private AI, on your desk", rows: ["...........", "...........", ".###..#####", "#...#...#..", "#...#...#..", "#####...#..", "#...#...#..", "#...#...#..", "#...#.#####", "...........", "..........."] },
+  ];
+  const mc = $("morph"), mg = mc.getContext("2d");
+  const targets = SHAPES.map((s) => { const out = []; s.rows.forEach((row, y) => [...row].forEach((ch, x) => ch === "#" && out.push([x, y]))); return out.sort((a, b) => (a[0] + a[1] * .5) - (b[0] + b[1] * .5)); });
+  const N = Math.max(...targets.map((x) => x.length));
+  let MS = 0, cell = 0, shapeI = 0, parts = [], mpos = { x: -999, y: -999 }, mOn = false;
+  const msize = () => {
+    const r = mc.getBoundingClientRect(), dpr = Math.min(2, devicePixelRatio || 1);
+    MS = r.width; cell = MS / 12; mc.width = MS * dpr; mc.height = MS * dpr; mg.setTransform(dpr, 0, 0, dpr, 0, 0);
+  };
+  const assign = (k) => {
+    const tg = targets[k];
+    parts.forEach((p, i) => {
+      if (i < tg.length) { p.tx = (tg[i][0] + .5) * cell + cell * .5; p.ty = (tg[i][1] + .5) * cell + cell * .5; p.ta = 1; }
+      else { p.tx = p.x + (Math.random() - .5) * cell * 4; p.ty = p.y + (Math.random() - .5) * cell * 4; p.ta = 0; }
+    });
+    $("morphCap").textContent = SHAPES[k].cap;
+    document.querySelectorAll(".term-bar .dots i").forEach((d, i) => d.classList.toggle("on", i === k));
+  };
+  msize();
+  for (let i = 0; i < N; i++) {
+    const a = Math.random() * 6.28, d = MS * (.6 + Math.random() * .6);
+    parts.push({ x: MS / 2 + Math.cos(a) * d, y: MS / 2 + Math.sin(a) * d, vx: 0, vy: 0, a: 0, tx: 0, ty: 0, ta: 0, hot: Math.random() < .07, ph: Math.random() * 6.28 });
+  }
+  assign(0);
+  const mdraw = (t) => {
+    mg.clearRect(0, 0, MS, MS);
+    const sz = cell * .72;
+    for (const p of parts) {
+      const dx = p.x - mpos.x, dy = p.y - mpos.y, d2 = dx * dx + dy * dy, R = cell * 2.6;
+      if (d2 < R * R) { const d = Math.sqrt(d2) || 1, f = (1 - d / R) * 2.4; p.vx += dx / d * f; p.vy += dy / d * f; }
+      p.vx = (p.vx + (p.tx - p.x) * .055) * .8; p.vy = (p.vy + (p.ty - p.y) * .055) * .8;
+      p.x += p.vx; p.y += p.vy; p.a += (p.ta - p.a) * .08;
+      if (p.a < .02) continue;
+      const breathe = reduced ? 1 : .86 + .14 * Math.sin(t / 700 + p.ph);
+      mg.globalAlpha = p.a * breathe; mg.fillStyle = p.hot ? col.soft : col.px;
+      mg.fillRect(Math.round(p.x - sz / 2), Math.round(p.y - sz / 2), Math.round(sz), Math.round(sz));
+    }
+    mg.globalAlpha = 1;
+  };
+  if (reduced) { shapeI = 1; assign(1); parts.forEach((p) => { p.x = p.tx; p.y = p.ty; p.a = p.ta; }); mdraw(0); }
+  // while the terminal plays, the sculpture follows its story; afterwards it cycles on its own
+  let nextMorph = Infinity;
+  const morphTo = (k) => { shapeI = k; assign(k); };
+  const mloop = (t) => {
+    if (!mOn) return;
+    if (t > nextMorph) { shapeI = (shapeI + 1) % SHAPES.length; assign(shapeI); nextMorph = t + 4200; }
+    mdraw(t); requestAnimationFrame(mloop);
+  };
+  mc.addEventListener("pointermove", (e) => { const r = mc.getBoundingClientRect(); mpos = { x: e.clientX - r.left, y: e.clientY - r.top }; });
+  mc.addEventListener("pointerleave", () => (mpos = { x: -999, y: -999 }));
+  mc.addEventListener("click", () => { if (reduced) return; parts.forEach((p) => { const a = Math.random() * 6.28, s = cell * (1 + Math.random() * 2); p.vx += Math.cos(a) * s; p.vy += Math.sin(a) * s; }); if (nextMorph !== Infinity) nextMorph = performance.now() + 2200; });
+  addEventListener("resize", () => { const old = cell; msize(); const k = cell / (old || 1); parts.forEach((p) => { p.x *= k; p.y *= k; }); assign(shapeI); });
+  if (!reduced && "IntersectionObserver" in window) new IntersectionObserver((e) => { mOn = e[0].isIntersecting; if (mOn) requestAnimationFrame(mloop); }).observe(mc);
+
+
   /* ---------- hero terminal: what `tlav` really does, played once ---------- */
   const termBody = $("termBody");
   const TERM = [
@@ -662,6 +735,7 @@ footer a:hover { color: var(--ink); }
     termBody.textContent = "";
     for (const s of TERM) {
       if (s.cmd) { const l = tline(`<span class="dim">$</span> <span class="b"></span>`), b = l.lastChild; for (const ch of s.cmd) { b.textContent += ch; await twait(110); } await twait(350); }
+      if (s.busy === "Compressing") morphTo(1);
       if (s.busy) { const l = tline(`<i class="sq go"></i>${s.busy}<span class="dim">…</span>`); await twait(s.ms); l.innerHTML = doneLine(s); await twait(260); }
       if (s.ask) { const l = tline(`<span class="dim">${s.ask} ›</span> `); await twait(700); l.insertAdjacentText("beforeend", s.pick); await twait(400); }
       if (s.you) { tline(""); const l = tline(`<span class="hl">›</span> `); for (const ch of s.you) { l.insertAdjacentText("beforeend", ch); await twait(38); } await twait(300); }
@@ -671,6 +745,7 @@ footer a:hover { color: var(--ink); }
         l.innerHTML = `<i class="sq"></i><span class="b">Tlav</span>`;
       }
       if (s.answer) {
+        morphTo(2);
         const l = tline(""), txt = document.createTextNode(""), pen = document.createElement("i");
         pen.className = "pen"; l.append(txt, pen);
         for (const w of s.answer.split(/(\s+)/)) { txt.textContent += w; await twait(/\s/.test(w) ? 0 : 95); }
@@ -680,7 +755,7 @@ footer a:hover { color: var(--ink); }
   };
   // Reserve the final height first so nothing below jumps while it types.
   termFinal();
-  if (!reduced) { termBody.style.minHeight = termBody.offsetHeight + "px"; setTimeout(() => termPlay().then(() => (termBody.style.minHeight = "")), 900); }
+  if (!reduced) { termBody.style.minHeight = termBody.offsetHeight + "px"; setTimeout(() => termPlay().then(() => { termBody.style.minHeight = ""; nextMorph = performance.now() + 4200; }), 900); }
 
   /* pixel field */
   const canvas = $("field"), ctx = canvas.getContext("2d");
