@@ -51,7 +51,7 @@
 input[type=range] { accent-color: var(--pixel); }
 section[id] { scroll-margin-top: 80px; }
 html { scroll-behavior: smooth; background: var(--bg); }
-body { background: var(--bg); color: var(--ink); font: 400 17px/1.6 var(--sans); transition: background-color .5s, color .5s; -webkit-font-smoothing: antialiased; overflow-x: clip; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 400 17px/1.6 var(--sans); transition: background-color .5s, color .5s; -webkit-font-smoothing: antialiased; overflow-x: clip; }
 body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 60; background: var(--bg); transition: background-color .3s; }
 .top-dark body::before { background: var(--night); }
 a { color: inherit; }
