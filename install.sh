@@ -33,6 +33,8 @@ fi
 ln -sf "$TLAV_HOME/venv/bin/tlav" "$BIN_DIR/tlav"
 
 echo
-echo "Tlav installed. Next, just type:"
-echo "  tlav          # picks, installs and runs the best model for this computer, then opens the chat"
+"$TLAV_HOME/venv/bin/tlav" welcome 2>/dev/null || {
+  echo "Tlav installed. Next, just type:"
+  echo "  tlav          # picks, installs and runs the best model for this computer, then opens the chat"
+}
 case ":$PATH:" in *":$BIN_DIR:"*) ;; *) echo; echo "Add $BIN_DIR to your PATH, e.g.: echo 'export PATH=\"$BIN_DIR:\$PATH\"' >> ~/.zshrc";; esac

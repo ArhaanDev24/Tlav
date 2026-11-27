@@ -85,6 +85,10 @@ def download(repo: str, filename: str, dest_dir: Optional[Path] = None, quiet: b
     return dest
 
 
+# Set by the setup screen to draw its own progress bar: PROGRESS(done_bytes, total_bytes, bytes_per_s)
+PROGRESS = None
+
+
 def _looks_like_gguf(path: Path) -> bool:
     try:
         with open(path, "rb") as f:
@@ -119,13 +123,16 @@ def _download_once(repo: str, filename: str, dest: Path, quiet: bool) -> Path:
                 f.write(chunk)
                 done += len(chunk)
                 now = time.time()
-                if not quiet and total and (now - last > (0.25 if tty else 10) or done == total):
+                if PROGRESS and total and (now - last > 0.2 or done == total):
+                    last = now
+                    PROGRESS(done, total, (done - have) / max(now - t0, 1e-6))
+                elif not quiet and not PROGRESS and total and (now - last > (0.25 if tty else 10) or done == total):
                     last = now
                     speed = (done - have) / max(time.time() - t0, 1e-6)
                     sys.stderr.write(("\r" if tty else "") + f"  {filename}: {_fmt(done)} / {_fmt(total)} "
                                      f"({100 * done / total:.0f}%, {_fmt(speed)}/s)   " + ("" if tty else "\n"))
                     sys.stderr.flush()
-    if not quiet:
+    if not quiet and not PROGRESS:
         sys.stderr.write("\n")
     if total and part.stat().st_size != total:
         raise IOError(f"Download incomplete ({part.stat().st_size} of {total} bytes); rerun to resume.")

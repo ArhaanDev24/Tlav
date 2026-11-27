@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from . import (__version__, anim, benchmark, catalog, chat, cluster, compress, config, discover, finder, gguf,
-               hardware, hub, planner, runtime, server, service, tuner, web)
+               hardware, hub, planner, runtime, server, service, tuner, ui, web)
 
 
 # ------------------------------------------------------------------ helpers
@@ -271,6 +271,7 @@ def _resolve_plan(args, nodes):
             sys.exit(f"{model.name} does not fit even when compressed. Try --cluster with another PC.")
         return plan, None
     plans = _choose(args, nodes)
+    args._ranked = plans
     if not plans:
         sys.exit("No model fits comfortably. Try `tlav setup --aggressive`, `--min-tps 1`, or a cluster.")
     print()
@@ -335,76 +336,142 @@ def _obtain_draft(plan) -> Optional[Path]:
 
 
 def cmd_setup(args):
-    print("Step 1/5  Detecting hardware")
-    hw = hardware.detect()
-    print("  " + hw.summary().replace("\n", "\n  "))
-    print("\nStep 2/5  Benchmarking")
-    if not args.skip_bench:
-        benchmark.quick_benchmark()
-    nodes = _nodes(args)
-    print(f"  usable memory bandwidth: {nodes[0].gbps:.1f} GB/s")
-    if len(nodes) > 1:
-        print(f"  cluster: {len(nodes) - 1} worker(s): " + ", ".join(f"{n.name} ({n.budget:.1f} GB)" for n in nodes[1:]))
-    print("\nStep 3/5  Choosing the best model")
-    plan, files = _resolve_plan(args, nodes)
-    if not args.no_draft and not files:
-        plan = planner.attach_draft(plan)
-    print(f"\n  -> {plan.label}: ~{plan.memory_gb:.1f} GB RAM, ~{plan.est_tps:.1f} tokens/s, {plan.quant.note}")
-    print(f"     context cache: {plan.kv} ({'half the memory of f16, quality checked' if plan.kv != 'f16' else 'full precision'})")
+    """The whole first run: one tidy line per stage, details behind --details."""
+    show = getattr(args, "details", False)
+    if not getattr(args, "_rechecked", False):
+        ui.banner("Setting up the best AI this computer can run.")
+
+    with ui.Step("Your computer") as st, ui.quiet(show):
+        hw = hardware.detect()
+        gpu = f" · {hw.gpu.upper()} GPU" if hw.gpu not in ("none", "", None) else ""
+        st.done(f"{hw.ram_total_gb:.0f} GB RAM · {hw.physical_cores} cores · {hw.simd.upper()}{gpu} · {hw.os_name}")
+    with ui.Step("Memory speed") as st, ui.quiet(show):
+        if not args.skip_bench:
+            benchmark.quick_benchmark()
+        nodes = _nodes(args)
+        workers = f" · plus {len(nodes) - 1} worker computer{'s' if len(nodes) > 2 else ''}" if len(nodes) > 1 else ""
+        st.done(f"{nodes[0].gbps:.1f} GB/s usable{workers}")
+
+    with ui.Step("Best model") as st:
+        st.status("ranking every model for this computer")
+        with ui.quiet(show) as q:
+            plan, files = _resolve_plan(args, nodes)
+            if not args.no_draft and not files:
+                plan = planner.attach_draft(plan)
+        where = f"across {len(plan.nodes)} computers" if plan.is_cluster else ""
+        st.done(f"{ui.c(ui.BOLD, plan.model.name)} · {plan.quant.name} · {plan.memory_gb:.1f} GB · "
+                f"~{plan.est_tps:.1f} tokens/s {where}".rstrip())
+    ranked = getattr(args, "_ranked", None) or []
+    if not (args.model or args.hf) and ranked:
+        ui.detail(f"why: {finder.why(plan, ranked[1] if len(ranked) > 1 else None, args.min_tps)}")
+        others = [p for p in ranked[1:3]]
+        if others:
+            ui.detail("also considered: " + ", ".join(f"{p.model.name} ({p.est_tps:.1f} tokens/s)" for p in others))
     if plan.draft:
-        print(f"     speculative decoding with {plan.draft.name}: same answers, usually faster")
-    _cluster_notes(plan)
-    if not args.yes and input("\nProceed? [Y/n] ").strip().lower() in ("n", "no"):
+        ui.detail(f"plus {plan.draft.name} as a helper: same answers, usually faster")
+    if plan.is_cluster:
+        ui.detail("layers split: " + ", ".join(f"{n.name.split('.')[0]} {s}" for n, s in zip(plan.nodes, plan.split)))
+    tip = q.text.split("tip: ", 1)[1].strip() if "tip: " in q.text else ""
+    if tip:
+        ui.detail("tip: " + tip.replace("\n", " "))
+    if show and ranked:
+        print()
+        _print_plans(ranked, 5)
+    print()
+
+    size = plan.model.weights_gb(plan.quant)
+    have = _model_file_present(plan, files)
+    question = f"Install {plan.model.name}?" + ("" if have else f" (about {size:.1f} GB to download)")
+    if not args.yes and not ui.ask(question):
+        print(ui.c(ui.DIM, "  Nothing installed. Run `tlav` again any time."))
         return
-    print("\nStep 4/5  Installing runtime and model")
+    print()
+
     if not runtime.find("llama-server") or (plan.is_cluster and not runtime.find("rpc-server")):
         note = runtime.platform_note(hw)
-        if note:
-            print("  " + note)
-        runtime.install(hw)
-    path = _obtain_model(plan, hw, args.local_compress, files, custom=args.custom, min_tps=args.min_tps)
-    draft = _obtain_draft(plan)
+        with ui.Step("AI engine") as st:
+            st.status("building llama.cpp for this processor, about 5-15 minutes")
+            with ui.quiet(show):
+                runtime.install(hw)
+            st.done("installed" + (f" · {note}" if note else ""))
+
+    label = "Model" if have else "Downloading"
+    with ui.Step(label) as st:
+        hub.PROGRESS = lambda d, total, spd: st.status(ui.bar_line("", d, total, spd).strip())
+        try:
+            with ui.quiet(show):
+                path = _obtain_model(plan, hw, args.local_compress, files, custom=args.custom, min_tps=args.min_tps)
+                draft = _obtain_draft(plan)
+        finally:
+            hub.PROGRESS = None
+        st.status("")
+        st.done(f"{Path(path).name} · {Path(path).stat().st_size / 1024 ** 3:.2f} GB" + (" (already here)" if have else ""))
     if args.kv_check and plan.kv != "f16":
-        print("  Checking that the compressed context cache keeps quality...")
-        res = compress.kv_check(path, hw.physical_cores, plan.kv)
-        print(f"  context cache {res['kv']}: {res.get('delta_pct', '?')}% perplexity change")
-        plan.kv = res["kv"]
-    print(f"  model: {path}")
+        with ui.Step("Memory check") as st, ui.quiet(show):
+            res = compress.kv_check(path, hw.physical_cores, plan.kv)
+            plan.kv = res["kv"]
+            st.done(f"compressed chat memory changes quality by {res.get('delta_pct', '?')}%")
+
     if not plan.is_cluster and not args.skip_bench and runtime.find("llama-bench"):
-        measured = _speed_check(plan, path, hw, nodes)
+        with ui.Step("Speed test") as st:
+            st.status("measuring real tokens/s, about a minute")
+            with ui.quiet(show):
+                predicted = plan.est_tps
+                measured = _speed_check(plan, path, hw, nodes)
+            st.done(f"{measured:.1f} tokens/s measured (estimated {predicted:.1f})" if measured else "skipped")
         if (measured and measured < args.min_tps * 0.6 and not getattr(args, "_rechecked", False)
                 and not (args.model or args.hf)):
-            print(f"  That is slower than this PC needs ({args.min_tps:g} tokens/s).")
-            if args.yes or input("  Pick again using the measured speed? [Y/n] ").strip().lower() not in ("n", "no"):
+            ui.detail(f"that is slower than this computer needs ({args.min_tps:g} tokens/s)")
+            if args.yes or ui.ask("Pick again using the measured speed?"):
                 args._rechecked = True
                 args.skip_bench = True
                 print()
                 return cmd_setup(args)
+
     s = tuner.settings(plan, hw, low_ram=args.low_ram)
     config.save_state(active={"path": str(path), "draft_path": str(draft) if draft else None,
                               "plan": plan.to_dict(), "settings": s})
     if args.no_run:
-        print("\nDone. Type `tlav` any time to chat, in the terminal or your browser"
-              + (" - keep the workers running." if plan.is_cluster else "."))
+        print()
+        print("  " + ui.c(ui.GREEN, "■") + " Done. Type " + ui.c(ui.BOLD, "tlav") + " any time to chat, in the terminal or "
+              "your browser" + (" (keep the workers running)." if plan.is_cluster else "."))
         return
-    print("\nStep 5/5  Starting your local AI")
     if args.detach:
         _launch(path, s, args.host, args.port, not args.no_browser, draft=draft, detach=True)
         return
-    _launch(path, s, args.host, args.port, False, draft=draft, detach=True, quiet=True)
-    print("  Ready.")
+    if plan.is_cluster:
+        _launch(path, s, args.host, args.port, False, draft=draft, detach=True, quiet=True)
+    else:
+        with ui.Step("Starting") as st:
+            st.status("loading the model into memory")
+            with ui.quiet(show):
+                _launch(path, s, args.host, args.port, False, draft=draft, detach=True, quiet=True)
+            st.done(f"{plan.model.name} is running on this computer, offline")
     _open_where(config.load_state()["server_url"], "web" if args.web else _ask_where())
+
+
+def _model_file_present(plan, files) -> bool:
+    """Is the chosen ready-made file already downloaded? (No network needed to answer.)"""
+    import re as _re
+    name = plan.quant.name
+    for f in config.models_dir().glob("*.gguf"):
+        stem = f.stem.lower().replace("_", "-")
+        model = _re.sub(r"[^a-z0-9.]+", "-", plan.model.name.lower())
+        if name.lower() in f.name.lower() and model.replace(" ", "-") in stem:
+            return True
+    return False
 
 
 def _ask_where(default: str = "terminal") -> str:
     """Terminal or web browser? Asked after setup and every time `tlav` opens."""
     if not sys.stdin.isatty():
         return default
-    print("\n  Where do you want to chat?")
-    print("    1  Here in the terminal")
-    print("    2  In your web browser")
+    print()
+    print(f"  {ui.c(ui.ORANGE, '?')} Where do you want to chat?")
+    print(f"    {ui.c(ui.BOLD, '1')}  Here in the terminal")
+    print(f"    {ui.c(ui.BOLD, '2')}  In your web browser")
     try:
-        ans = input("  Choose 1 or 2 [1]: ").strip().lower()
+        ans = input(f"  Choose 1 or 2 {ui.c(ui.DIM, '[1]')}: ").strip().lower()
     except (EOFError, KeyboardInterrupt):
         print()
         sys.exit(0)
@@ -418,6 +485,14 @@ def _open_where(url: str, where: str) -> None:
         print("  Tlav keeps running in the background: `tlav` brings you back, `tlav stop` frees its memory.")
         return
     _open_chat(url)
+
+
+def cmd_welcome(args):
+    """The welcome box the installer shows."""
+    ui.banner("Private AI on the computer you already own.", [
+        "Next, type  tlav  and it measures this computer, picks the best",
+        "model, shrinks it to fit and opens a chat. Everything stays offline.",
+    ])
 
 
 def cmd_open(args):
@@ -868,6 +943,7 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--yes", "-y", action="store_true")
     s.add_argument("--no-run", action="store_true")
     s.add_argument("--web", action="store_true", help="open the browser chat without asking")
+    s.add_argument("--details", action="store_true", help="show the full ranking table and every step's output")
     s.add_argument("--offline", action="store_true", help="pick from specs only, without checking file sizes online")
     s.set_defaults(func=cmd_setup)
 
@@ -903,6 +979,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     s = sub.add_parser("stop", help="stop a background server")
     s.set_defaults(func=cmd_stop)
+
+    s = sub.add_parser("welcome", help=argparse.SUPPRESS)
+    s.set_defaults(func=cmd_welcome)
 
     s = sub.add_parser("open", help="start your model and choose terminal or web chat (what plain `tlav` does)")
     s.add_argument("--where", choices=["terminal", "web"], help="skip the question")
