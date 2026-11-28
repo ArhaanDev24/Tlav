@@ -161,9 +161,12 @@ def evaluate_nodes(model: Model, quant: Quant, nodes: List[Node], task: str = "c
         if any(need * sh > cap + 1e-9 for sh, cap in zip(shares, caps)):
             continue  # rounding pushed one machine over its budget
         tps = _cluster_tps(model, quant, nodes, shares)
-        mem = need + RUNTIME_OVERHEAD_GB * len(nodes)
+        # A helper that gets no layers would only be one more machine that has to be online.
+        keep = [i for i, n in enumerate(split) if n > 0 or i == 0]
+        used = [nodes[i] for i in keep]
+        mem = need + RUNTIME_OVERHEAD_GB * len(used)
         return Plan(model, quant, ctx, mem, tps, model.score(task) * quant.retention, kv,
-                    nodes=list(nodes), split=split)
+                    nodes=used, split=[split[i] for i in keep])
     return None
 
 

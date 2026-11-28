@@ -211,3 +211,34 @@ def test_failed_model_search_isnt_retried_on_every_start(tmp_path, monkeypatch):
     discover.refresh_if_stale(progress=lambda *a: None)
     discover.refresh_if_stale(progress=lambda *a: None)
     assert len(calls) == 1
+
+
+def test_a_helper_with_no_room_isnt_part_of_the_plan():
+    from tlav import catalog, hardware, planner
+    main = planner.Node(hardware.simulated(16), 16.0)
+    big = planner.Node(hardware.simulated(32), 16.0, endpoint="10.0.0.5:50052", latency_ms=0.5, name="big")
+    tiny = planner.Node(hardware.simulated(0.5), 8.0, endpoint="10.0.0.9:50052", latency_ms=0.5, name="tiny")
+    model = next(m for m in catalog.load(include_discovered=False) if m.params_b > 20)
+    plan = planner.evaluate_nodes(model, catalog.QUANT_BY_NAME["Q4_K_M"], [main, big, tiny])
+    assert plan and "tiny" not in [n.name for n in plan.nodes]
+    assert len(plan.split) == len(plan.nodes) and sum(plan.split) == model.layers
+
+
+def test_chat_files_are_safe_on_every_system(tmp_path, monkeypatch, capsys):
+    from tlav import chat
+    monkeypatch.setenv("TLAV_HOME", str(tmp_path))
+    assert chat.safe_name("con") == "chat-con" and chat.safe_name("NUL.txt") == "chat-NUL.txt"
+    assert chat.safe_name("../../etc/passwd") == "etc-passwd"
+    c = chat.Chat.__new__(chat.Chat)
+    c.messages, c.info = [], {}
+    (chat.Chat.chats_dir() / "broken.json").write_text("{half a fi")
+    (chat.Chat.chats_dir() / "odd.json").write_text('{"messages": [1, 2]}')
+    for name in ("broken", "odd"):
+        assert c.command("load", name) is True                     # the chat carries on
+        assert "damaged" in capsys.readouterr().out
+    def full(*a, **k):
+        raise OSError(28, "No space left on device")
+    monkeypatch.setattr(chat.Path, "write_text", full)
+    c.messages = [{"role": "user", "content": "hi"}]
+    assert c.command("save", "x") is True and "disk full" in capsys.readouterr().out
+    c.autosave()                                                   # quiet, no crash

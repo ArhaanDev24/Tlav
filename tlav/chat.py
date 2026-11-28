@@ -404,8 +404,13 @@ def shorten(text: str, max_tokens: int, chars_per_token: float = 3.0) -> str:
         + text[-(keep - head):]
 
 
+_WIN_RESERVED = {"con", "prn", "aux", "nul"} | {f"{d}{i}" for d in ("com", "lpt") for i in range(1, 10)}
+
+
 def safe_name(name: str) -> str:
-    return re.sub(r"[^A-Za-z0-9._-]+", "-", name).strip("-.")[:60] or "chat"
+    out = re.sub(r"[^A-Za-z0-9._-]+", "-", name).strip("-.")[:60] or "chat"
+    # Windows can't create files called CON, NUL, AUX... (even with an extension)
+    return "chat-" + out if out.split(".")[0].lower() in _WIN_RESERVED else out
 
 
 # ------------------------------------------------------------------ streaming
@@ -519,10 +524,18 @@ class Chat:
         return path
 
     def load(self, name: str) -> bool:
+        """False if there's no such chat; ValueError if the file is damaged."""
         path = self.chats_dir() / (safe_name(name) + ".json")
         if not path.exists():
             return False
-        self.messages = json.loads(path.read_text()).get("messages", [])
+        try:
+            msgs = json.loads(path.read_text()).get("messages", [])
+        except (OSError, ValueError, AttributeError):
+            raise ValueError("damaged") from None
+        if not isinstance(msgs, list) or not all(isinstance(m, dict) and isinstance(m.get("role"), str)
+                                                 and isinstance(m.get("content"), str) for m in msgs):
+            raise ValueError("damaged")
+        self.messages = msgs
         return True
 
     # -- output
@@ -651,11 +664,19 @@ class Chat:
                 print(dim(f"  Usage: /temp 0.7 (now {self.temperature})"))
         elif name == "save":
             name_ = arg or time.strftime("chat-%Y%m%d-%H%M")
-            print(dim(f"  Saved to {self.save(name_)}"))
+            try:
+                print(dim(f"  Saved to {self.save(name_)}"))
+            except OSError as e:
+                print(dim(f"  Couldn't save the chat ({e.strerror or e}). Is the disk full?"))
         elif name in ("load", "open"):
+            try:
+                found = bool(arg) and self.load(arg)
+            except ValueError:
+                print(dim(f"  The saved chat '{arg}' is damaged and can't be opened."))
+                return True
             if not arg:
                 print(dim("  Usage: /load NAME (see /list)"))
-            elif self.load(arg):
+            elif found:
                 n = sum(1 for m in self.messages if m["role"] != "system")
                 print(dim(f"  Loaded '{arg}' ({n} messages). Carry on where you left off."))
             else:
@@ -693,7 +714,10 @@ class Chat:
 
     def autosave(self) -> None:
         if any(m["role"] == "user" for m in self.messages):
-            self.save("last")
+            try:
+                self.save("last")
+            except OSError:
+                pass       # a full disk must not stop the chat; /save reports it when asked
 
     # -- loop
     def read(self) -> Optional[str]:
