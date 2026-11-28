@@ -352,8 +352,25 @@ def cmd_setup(args):
         if not args.skip_bench:
             benchmark.quick_benchmark()
         nodes = _nodes(args)
+        helpers = []
+        if (not args.cluster and not getattr(args, "ram", None) and not args.model and not args.hf
+                and not args.yes and sys.stdin.isatty()):
+            st.status("looking for helper computers on your network")
+            helpers = _quick_helpers()
         workers = f" · plus {len(nodes) - 1} worker computer{'s' if len(nodes) > 2 else ''}" if len(nodes) > 1 else ""
         st.done(f"{nodes[0].gbps:.1f} GB/s usable{workers}")
+    if helpers:
+        together, alone = _together_vs_alone(helpers)
+        if _clearly_better(together, alone):
+            n = len(helpers)
+            print(f"  Found {n} other computer{'s' if n > 1 else ''} running Tlav. Together you can run "
+                  f"{ui.c(ui.BOLD, together.model.name)} instead of {alone.model.name if alone else 'a small model'}.")
+            if ui.ask("Use them too?", default="n"):
+                known = {w["endpoint"] for w in helpers}
+                cluster.save_workers([w for w in cluster.saved_workers() if w["endpoint"] not in known] + helpers)
+                args.cluster = True
+                nodes = _nodes(args)
+            print()
 
     with ui.Step("Best model") as st:
         st.status("ranking every model for this computer")
@@ -729,15 +746,164 @@ def cmd_worker(args):
                        cache=not args.no_cache, threads=args.threads, mem_mb=args.mem)
 
 
+def _worker_summary(w: dict) -> str:
+    hw = w.get("hardware") or {}
+    return f"{hw.get('ram_total_gb', 0):.0f} GB RAM, {hw.get('physical_cores', '?')} cores" if hw else "size unknown"
+
+
+def _probe_worker(w: dict, links, i: int, notes: list, args) -> bool:
+    """Check a discovered helper really accepts work; settle its line. True if it's usable."""
+    name = w.get("hostname") or w["endpoint"]
+    lat = cluster.reachable(w)
+    w.pop("candidates", None)
+    if lat is None:
+        links.done(i, "found it, but its firewall blocks Tlav", ok=False)
+        os_name = (w.get("hardware") or {}).get("os_name")
+        notes.append(f"{name}: " + cluster.firewall_help(os_name, int(w["endpoint"].rsplit(":", 1)[1]),
+                                                         args.discovery_port))
+        return False
+    w["latency_ms"] = round(lat, 2)
+    links.done(i, f"connected · {_worker_summary(w)} · {lat:.1f} ms, {cluster.network_advice(lat)}")
+    warn = cluster.engine_mismatch(w)
+    if warn:
+        notes.append(warn)
+    return True
+
+
+def _together_vs_alone(workers: List[dict]):
+    """(best plan with the helpers, best plan on this PC alone), from the specs (fast, offline)."""
+    hw = hardware.detect()
+    gbps = benchmark.cached_or_run()["effective_gbps"]
+    with ui.quiet():
+        alone = planner.candidates(hw, gbps)
+        together = planner.candidates(hw, gbps, workers=cluster.to_nodes(workers, refresh_latency=False))
+    return (together[0] if together else None), (alone[0] if alone else None)
+
+
+def _clearly_better(together, alone) -> bool:
+    """Only worth bothering people when the helpers unlock a noticeably smarter model."""
+    if not together or not together.is_cluster:
+        return False
+    return alone is None or together.quality >= alone.quality + 4
+
+
+def _quick_helpers(timeout: float = 1.5) -> List[dict]:
+    """Helpers that answer a quick search and really accept work (used by setup)."""
+    out = []
+    try:
+        for w in cluster.scan(timeout=timeout):
+            lat = cluster.reachable(w)
+            if lat is not None and not cluster.engine_mismatch(w):
+                w.pop("candidates", None)
+                w["latency_ms"] = round(lat, 2)
+                out.append(w)
+    except OSError:
+        pass
+    return out
+
+
+def _offer_cluster_setup(workers: List[dict]) -> None:
+    together, alone = _together_vs_alone(workers)
+    n = len(workers) + 1
+    ram = sum((w.get("hardware") or {}).get("ram_total_gb", 0) for w in workers) + hardware.detect().ram_total_gb
+    print()
+    if not _clearly_better(together, alone):
+        best = alone.model.name if alone else "the best model"
+        print(f"  This PC can already run {best} on its own, and the helpers wouldn't add a clearly better")
+        print("  model, so Tlav keeps using this PC alone. The helpers stay saved for later.")
+        return
+    print(f"  Together: {n} computers, {ram:.0f} GB RAM. They can run {ui.c(ui.BOLD, together.model.name)} "
+          f"(~{together.est_tps:.1f} tokens/s)")
+    print(f"  instead of {alone.model.name if alone else 'nothing'} on this PC alone." if alone else "")
+    if sys.stdin.isatty() and ui.ask("Set it up across these computers now?"):
+        sub = build_parser().parse_args(["setup", "--cluster"])
+        sub.func(sub)
+    else:
+        print(ui.c(ui.DIM, "  Any time:  tlav setup --cluster"))
+
+
+def cmd_cluster_connect(args):
+    """`tlav cluster`: find the helper computers by itself, show them live, then offer to use them."""
+    import time as _time
+    interactive = sys.stdin.isatty() and ui.ON
+    ui.heading("Connect your computers")
+    print("  On each helper computer, install Tlav and type " + ui.c(ui.BOLD, "tlav worker") +
+          ". They show up here by themselves.")
+    if interactive:
+        print(ui.c(ui.DIM, "  Press Enter when all your helpers are here."))
+    print()
+    saved = cluster.saved_workers()
+    links = anim.Links([("this PC", "your network")], "listening").start()
+    online, notes, lines = {}, [], {}            # endpoint -> worker; endpoint -> line index
+    by_name, shown = {}, []                       # saved-but-offline helpers by computer name; labels shown
+    names = [w.get("hostname") for w in saved]
+    for w in saved:
+        label = cluster.display_name(w, saved)
+        i = links.add("this PC", label, "checking")
+        shown.append(w.get("hostname"))
+        lines[w["endpoint"]] = i
+        lat = cluster.ping(w["endpoint"], tries=1)
+        if lat is not None:
+            w["latency_ms"] = round(lat, 2)
+            online[w["endpoint"]] = w
+            links.done(i, f"online · {_worker_summary(w)} · {lat:.1f} ms, {cluster.network_advice(lat)}")
+        else:
+            links.done(i, "saved, not answering yet (start `tlav worker` there)", ok=False)
+            if w.get("hostname") and names.count(w["hostname"]) == 1:
+                by_name[w["hostname"]] = i            # it may come back at a new address
+    deadline = _time.time() + (args.wait if interactive else args.timeout)
+    tried = set()                                 # helpers already checked (firewalled ones aren't re-tried)
+    while True:
+        for w in cluster.scan(timeout=1.2, token=args.token, port=args.discovery_port):
+            cands = w.get("candidates") or [w["endpoint"]]
+            if any(k in online or k in tried for k in cands):
+                continue
+            tried.update(cands)
+            i = next((lines[k] for k in cands if k in lines), None)
+            if i is None:
+                i = by_name.pop(w.get("hostname"), None)
+            if i is None:
+                name = w.get("hostname") or w["endpoint"]
+                label = f"{name} :{w['endpoint'].rsplit(':', 1)[1]}" if name in shown else name
+                shown.append(name)
+                i = links.add("this PC", label, "connecting")
+            for k in cands:
+                lines[k] = i
+            if _probe_worker(w, links, i, notes, args):
+                online[w["endpoint"]] = w
+        if not interactive or _time.time() > deadline:
+            break
+        if ui.enter_pressed():
+            if os.name != "nt":
+                links.cursor_moved()          # the terminal echoed the Enter as a new line
+            break
+    n = len(online)
+    blocked = len(dict.fromkeys(notes)) - sum(1 for x in notes if "AI engine build" in x)
+    summary = (f"{n} helper{'s' if n != 1 else ''} connected" if n
+               else f"found {blocked}, but couldn't connect" if blocked else "no helpers answered")
+    links.done(0, summary, ok=bool(n))
+    links.finish()
+    for note in dict.fromkeys(notes):
+        print("\n  ! " + note)
+    if online:
+        names = {w.get("hostname") for w in online.values()}
+        keep = [w for w in saved if w["endpoint"] not in online and w.get("hostname") not in names]
+        cluster.save_workers(keep + list(online.values()))
+        _offer_cluster_setup(list(online.values()))
+    elif not notes:
+        print("\n" + cluster.NOT_FOUND_HELP)
+
+
 def cmd_cluster(args):
+    if args.action == "connect":
+        return cmd_cluster_connect(args)
     if args.action == "scan":
         print("Looking for Tlav workers on your network...\n")
         search = anim.Links([("this PC", "your network")], "searching").start()
         found = cluster.scan(timeout=args.timeout, token=args.token, port=args.discovery_port)
         search.finish(f"{len(found)} answered" if found else "nobody answered", ok=bool(found))
         if not found:
-            print("\nMake sure `tlav worker` runs on the other PCs, or add one by IP:\n"
-                  "  tlav cluster add 192.168.1.23")
+            print("\n" + cluster.NOT_FOUND_HELP)
             return
         links = anim.Links([("this PC", cluster.display_name(w, found)) for w in found], "connecting").start()
         saved, notes = [], []
@@ -745,7 +911,9 @@ def cmd_cluster(args):
             lat = cluster.reachable(w)
             w.pop("candidates", None)
             if lat is None:
-                links.done(i, "answered, but its engine port is closed (firewall? TCP 50052)", ok=False)
+                links.done(i, "found it, but its firewall blocks Tlav", ok=False)
+                notes.append(f"{w.get('hostname', w['endpoint'])}: " + cluster.firewall_help(
+                    (w.get("hardware") or {}).get("os_name"), int(w["endpoint"].rsplit(":", 1)[1]), args.discovery_port))
                 continue
             w["latency_ms"] = lat
             hw = w.get("hardware") or {}
@@ -1101,10 +1269,12 @@ def build_parser() -> argparse.ArgumentParser:
     s.set_defaults(func=cmd_worker)
 
     s = sub.add_parser("cluster", help="manage the computers that work together")
-    s.add_argument("action", choices=["scan", "add", "remove", "list", "clear"], nargs="?", default="list")
+    s.add_argument("action", choices=["connect", "scan", "add", "remove", "list", "clear"], nargs="?",
+                   default="connect", help="connect (default): find helpers live and offer to use them")
     s.add_argument("address", nargs="?", help="IP[:PORT] for add/remove")
     s.add_argument("--token")
     s.add_argument("--timeout", type=float, default=2.0)
+    s.add_argument("--wait", type=float, default=90.0, help="connect: seconds to keep listening (Enter stops early)")
     s.add_argument("--discovery-port", type=_port, default=cluster.DISCOVERY_PORT)
     s.set_defaults(func=cmd_cluster)
 

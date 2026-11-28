@@ -120,13 +120,15 @@ Yes, you can pool several old computers into one bigger AI machine. Tlav uses ll
 ```bash
 tlav worker
 ```
+It shows a "ready to help" screen with this computer's name and address, and a live line that says when the main computer is using it.
 
 **On the main computer:**
 ```bash
-tlav cluster scan            # finds the workers automatically
-tlav recommend --cluster     # what the combined machines can run
-tlav setup --cluster         # pick, download, split and run it
+tlav cluster
 ```
+Helpers appear by themselves as they join, with their RAM and connection quality, and are saved. Press Enter when they're all there: Tlav tells you what the computers can run together (for example *Qwen3.6 35B instead of Qwen3.5 9B on this PC alone*) and offers to set it up. Plain `tlav` setup also notices helpers on your network, and asks only when they'd get you a clearly better model.
+
+If a helper is found but can't be used, Tlav says why in plain words, with the exact fix for that computer's system (usually its firewall: on Windows, click "Allow access" the first time).
 
 If your network blocks discovery, add a worker by address: `tlav cluster add 192.168.1.23`.
 
@@ -223,7 +225,8 @@ A bigger model compressed to Q4_K_M almost always beats a smaller model kept at 
 | `tlav status` / `tlav stop` | What's running and how much memory it really uses / stop it |
 | `tlav chat` | The Tlav chat (starts your model if needed) |
 | `tlav worker` | Share this PC's RAM and CPU with a main computer |
-| `tlav cluster scan/add/list/remove/clear` | Manage workers |
+| `tlav cluster` | Find helper computers live, save them, offer a bigger model |
+| `tlav cluster scan/add/list/remove/clear` | Manage workers by hand |
 | `tlav service install [--worker]` | Start at login (launchd / systemd / Task Scheduler): an always-on AI box |
 | `tlav install-runtime` | Install/rebuild llama.cpp tuned for this CPU |
 | `tlav list` | Downloaded models |

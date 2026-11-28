@@ -100,7 +100,7 @@ The strongest model that still runs smoothly on **your** machine:
 
 ## Cluster
 
-Run `tlav worker` on spare computers, then `tlav setup --cluster` on the main one. Their memory adds up, so you can run a bigger, smarter model.
+Type `tlav worker` on each spare computer, then `tlav cluster` on your main one. It finds them by itself, shows them as they join, and offers to set up a bigger, smarter model their memory can hold together.
 
 <p align="center">
   <img src="docs/media/cluster.gif" alt="Tlav connecting two workers and splitting a model across three computers" width="860">
@@ -117,6 +117,7 @@ Run `tlav worker` on spare computers, then `tlav setup --cluster` on the main on
 | `tlav chat` | Terminal chat |
 | `tlav run` | Web chat + OpenAI-compatible API |
 | `tlav worker` | Lend this PC to a cluster |
+| `tlav cluster` | Find your helper computers and use them |
 | `tlav stop` | Free the memory |
 | `tlav remove` | Delete models you no longer need |
 | `tlav uninstall` | Remove Tlav completely |

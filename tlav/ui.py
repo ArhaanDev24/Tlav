@@ -4,6 +4,7 @@ Everything degrades to plain text when the output isn't a real terminal (pipes, 
 """
 
 import os
+import re
 import shutil
 import sys
 import threading
@@ -69,7 +70,7 @@ def banner(subtitle: str = "", lines: Optional[list] = None) -> None:
     side = c(DIM, "│")
 
     def row(text: str = "", visible: Optional[int] = None) -> str:
-        n = len(text) if visible is None else visible
+        n = len(re.sub(r"\033\[[0-9;]*m", "", text)) if visible is None else visible
         return f"{side} {text}{' ' * max(0, inner - n)} {side}"
 
     print(top)
@@ -84,7 +85,7 @@ def banner(subtitle: str = "", lines: Optional[list] = None) -> None:
     if lines:
         print(row())
         for ln in lines:
-            print(row(ln, len(ln)))
+            print(row(ln))
     print(row())
     print(bot)
     print()
@@ -215,6 +216,27 @@ def ask(question: str, default: str = "y") -> bool:
     if not ans:
         return default == "y"
     return ans in ("y", "yes")
+
+
+def enter_pressed() -> bool:
+    """True once the user has pressed Enter (never blocks). Works in real terminals on every OS."""
+    if not sys.stdin or not sys.stdin.isatty():
+        return False
+    try:
+        if os.name == "nt":
+            import msvcrt
+            hit = False
+            while msvcrt.kbhit():
+                if msvcrt.getwch() in ("\r", "\n"):
+                    hit = True
+            return hit
+        import select
+        if select.select([sys.stdin], [], [], 0)[0]:
+            sys.stdin.readline()
+            return True
+    except (OSError, ValueError):
+        pass
+    return False
 
 
 def heading(text: str) -> None:

@@ -35,7 +35,7 @@ class _Line:
     def __init__(self, left: str, right: str, label: str, offset: float):
         self.left, self.right, self.label = left, right, label
         self.offset = offset            # so several links don't pulse in lockstep
-        self.final: Optional[str] = None
+        self.final: Optional[str] = None      # the settled note (plain text)
         self.ok = True
 
 
@@ -88,12 +88,16 @@ class Links:
         sq_l = _c(ORANGE, "■", self.on)
         sq_r = _c(ORANGE if ln.final is None else (GREEN if ln.ok else DIM), "■", self.on)
         if ln.final is not None:
-            tail = ln.final
+            tail, color = ln.final, (GREEN if ln.ok else DIM)
         else:
             secs = int(time.time() - self.t0)
-            tail = _c(DIM, f"{ln.label}…" + (f"  {secs}s" if secs else ""), self.on)
+            tail, color = f"{ln.label}…" + (f"  {secs}s" if secs else ""), DIM
+        # never wrap: a wrapped line would throw the redraw off by a row
+        room = self.width - 1 - (self.lw + self.rw + self.track + 11)
+        if len(tail) > room:
+            tail = tail[:max(0, room - 1)] + "…"
         return (f"  {sq_l} {ln.left:<{self.lw}} {self._track(ln, t)} {sq_r} {_c(BOLD, f'{ln.right:<{self.rw}}', self.on)}"
-                f"   {tail}")
+                f"   {_c(color, tail, self.on)}")
 
     def _draw(self):
         t = time.time() - self.t0
@@ -102,6 +106,7 @@ class Links:
             out.append(f"\033[{self._drawn}A")
         for ln in self.lines:
             out.append("\r\033[K" + self._render(ln, t) + "\n")
+        out.append("\033[J")          # wipe anything left below (e.g. after the terminal echoed Enter)
         sys.stdout.write("".join(out))
         sys.stdout.flush()
         self._drawn = len(self.lines)
@@ -121,11 +126,28 @@ class Links:
             self._thread.start()
         return self
 
+    def add(self, left: str, right: str, label: str = "connecting") -> int:
+        """Add a link while the others keep animating (a worker that just appeared). Returns its index."""
+        with self.lock:
+            self.lines.append(_Line(left, right, label, len(self.lines) * 0.37))
+            self.lw = max(self.lw, len(left))
+            self.rw = max(self.rw, len(right))
+            self.track = max(6, min(TRACK, self.width - self.lw - self.rw - 46))
+            if self.on and self._thread is None and not self._stop.is_set():
+                self._draw()
+            return len(self.lines) - 1
+
+    def cursor_moved(self, rows: int = 1) -> None:
+        """The terminal moved the cursor down (it echoed the Enter key); keep the redraw aligned."""
+        with self.lock:
+            if self._drawn:
+                self._drawn += rows
+
     def done(self, index: int, note: str, ok: bool = True) -> None:
         """Settle one link: solid green when ok, dashed grey when not."""
         ln = self.lines[index]
         with self.lock:
-            ln.final = _c(GREEN if ok else DIM, note, self.on) if self.on else note
+            ln.final = note
             ln.ok = ok
 
     def finish(self, note: Optional[str] = None, ok: bool = True) -> None:

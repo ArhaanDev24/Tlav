@@ -20,6 +20,7 @@ import json
 import signal
 import socket
 import subprocess
+import sys
 import threading
 import time
 from typing import Dict, List, Optional
@@ -83,6 +84,71 @@ def engine_mismatch(worker: dict) -> Optional[str]:
     return None
 
 
+# ------------------------------------------------------------------ plain-words help
+
+def firewall_help(os_name: Optional[str], rpc_port: int = RPC_PORT, discovery_port: int = DISCOVERY_PORT) -> str:
+    """How to let the main computer in, for the helper's operating system."""
+    o = (os_name or "").lower()
+    if o.startswith("win"):
+        return ("On that Windows PC, click \"Allow access\" when Windows asks about the firewall, or run this once\n"
+                "    in PowerShell opened as administrator:\n"
+                f"      New-NetFirewallRule -DisplayName 'Tlav worker' -Direction Inbound -Protocol TCP -LocalPort {rpc_port} "
+                "-Action Allow\n"
+                f"      New-NetFirewallRule -DisplayName 'Tlav discovery' -Direction Inbound -Protocol UDP -LocalPort "
+                f"{discovery_port} -Action Allow")
+    if o.startswith(("darwin", "mac")):
+        return ("On that Mac, click \"Allow\" when macOS asks about incoming connections, or open System Settings >\n"
+                "    Network > Firewall > Options and allow rpc-server.")
+    return ("On that Linux PC, if a firewall is on, run:\n"
+            f"      sudo ufw allow {rpc_port}/tcp && sudo ufw allow {discovery_port}/udp")
+
+
+NOT_FOUND_HELP = """No helper computers answered. Check that:
+  1. Each helper has Tlav installed and is showing the `tlav worker` screen.
+  2. They're on the same network as this computer (same Wi-Fi or router).
+  3. Their firewall lets Tlav in (Windows asks the first time: click "Allow access").
+Still nothing? Add a helper by the address shown on its screen:  tlav cluster add 192.168.1.23"""
+
+
+class Activity:
+    """Reads rpc-server's output to tell whether a main computer is using this PC right now.
+
+    rpc-server prints one line per connection. Quick checks from Tlav (is it reachable?) open
+    and close at once; a main computer running a model keeps its connection open.
+    """
+
+    BUSY_AFTER = 2.0   # seconds a connection must stay open to count as "in use"
+
+    def __init__(self):
+        self.starts: List[float] = []
+        self.helped = 0          # how many times a main computer used this PC
+        self.lock = threading.Lock()
+
+    def feed(self, line: str, now: Optional[float] = None) -> None:
+        now = time.time() if now is None else now
+        with self.lock:
+            if "Accepted client connection" in line:
+                self.starts.append(now)
+            elif "Client connection closed" in line and self.starts:
+                began = self.starts.pop()          # quick checks come and go on top of a long session
+                if now - began >= self.BUSY_AFTER and not self.starts:
+                    self.helped += 1
+
+    def busy_for(self, now: Optional[float] = None) -> float:
+        """Seconds the main computer has been using this PC (0 if it isn't)."""
+        now = time.time() if now is None else now
+        with self.lock:
+            if not self.starts:
+                return 0.0
+            age = now - self.starts[0]
+            return age if age >= self.BUSY_AFTER else 0.0
+
+
+def _ago(secs: float) -> str:
+    secs = int(secs)
+    return f"{secs}s" if secs < 60 else f"{secs // 60}m" if secs < 3600 else f"{secs // 3600}h {secs % 3600 // 60}m"
+
+
 # ------------------------------------------------------------------ worker side
 
 class DiscoveryResponder(threading.Thread):
@@ -116,9 +182,11 @@ class DiscoveryResponder(threading.Thread):
 def run_worker(host: Optional[str] = None, port: int = RPC_PORT, token: Optional[str] = None,
                discovery_port: int = DISCOVERY_PORT, cache: bool = True, threads: Optional[int] = None,
                mem_mb: Optional[int] = None) -> None:
+    from . import ui
     exe = runtime.require("rpc-server")
     hw = hardware.detect()
     gbps = benchmark.cached_or_run()["effective_gbps"]
+    chosen = host
     host = host or lan_ip()
     cmd = [exe, "-H", host, "-p", str(port), "-t", str(threads or hw.physical_cores)]
     if cache:
@@ -131,12 +199,35 @@ def run_worker(host: Optional[str] = None, port: int = RPC_PORT, token: Optional
     info = worker_info(host, port, hw, gbps)
     responder = DiscoveryResponder(info, token, discovery_port)
     responder.start()
-    print(f"Tlav worker '{info['hostname']}' sharing {hw.ram_total_gb:.0f} GB RAM, {hw.physical_cores} cores")
-    print(f"  RPC endpoint: {host}:{port}    discovery: UDP {discovery_port}")
-    print("  On the main computer run:  tlav cluster scan   (or: tlav cluster add "
-          f"{host}{'' if port == RPC_PORT else ':' + str(port)})")
-    print("  Only use this on a trusted home network. Ctrl+C to stop.\n")
-    proc = subprocess.Popen(cmd)
+
+    addr = host + ("" if port == RPC_PORT else f":{port}")
+    ui.banner("This computer is ready to help.", [
+        f"{info['hostname']} · {hw.ram_total_gb:.0f} GB RAM · {hw.physical_cores} cores · address {addr}",
+        "",
+        "On your main computer, type:   " + ui.c(ui.BOLD, "tlav cluster"),
+        ui.c(ui.DIM, "Not found by itself? Use:  tlav cluster add " + addr),
+    ] if ui.ON else [
+        f"{info['hostname']} · {hw.ram_total_gb:.0f} GB RAM · {hw.physical_cores} cores · address {addr}",
+        "On your main computer, type:   tlav cluster",
+        "If it isn't found:   tlav cluster add " + addr])
+    if not chosen and host.startswith("127."):
+        print(ui.c(ui.ORANGE, "  ! This computer isn't connected to a network, so no other computer can reach it.")
+              + "\n    Connect it to Wi-Fi or Ethernet, then run `tlav worker` again.\n")
+    print(ui.c(ui.DIM, "  Home networks you trust only. Ctrl+C stops sharing."))
+    print(ui.c(ui.DIM, "  Share at every start:  tlav service install --worker"))
+    print()
+
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors="replace",
+                            bufsize=1)
+    act, tail = Activity(), []
+
+    def _read():
+        for line in proc.stdout:
+            act.feed(line)
+            tail.append(line.rstrip())
+            del tail[:-20]
+    reader = threading.Thread(target=_read, daemon=True)
+    reader.start()
 
     # Stop the engine however the worker is stopped (Ctrl+C, closing the window, `kill`), so it
     # never keeps sharing this computer in the background on its own.
@@ -145,11 +236,28 @@ def run_worker(host: Optional[str] = None, port: int = RPC_PORT, token: Optional
     for name in ("SIGTERM", "SIGHUP"):
         if hasattr(signal, name):
             signal.signal(getattr(signal, name), _quit)
+    last, frame = None, 0
     try:
-        proc.wait()
+        while proc.poll() is None:
+            busy = act.busy_for()
+            if busy:
+                text = f"helping your main computer · holding its share of the model · {_ago(busy)}"
+            else:
+                text = "waiting for your main computer" + (f" · helped {act.helped}x so far" if act.helped else "")
+            if ui.ON:
+                sq = ui.c(ui.ORANGE, ui.FRAMES[frame % 4]) if not busy else ui.c(ui.GREEN, "■")
+                sys.stdout.write(f"\r\033[K  {sq} {text}{'' if busy else '…'}")
+                sys.stdout.flush()
+                frame += 1
+            elif text != last:
+                print("  " + text)
+            last = text
+            time.sleep(0.25)
     except KeyboardInterrupt:
         pass
     finally:
+        if ui.ON:
+            sys.stdout.write("\r\033[K")
         if proc.poll() is None:
             proc.terminate()
             try:
@@ -157,6 +265,15 @@ def run_worker(host: Optional[str] = None, port: int = RPC_PORT, token: Optional
             except subprocess.TimeoutExpired:
                 proc.kill()
         responder.stop()
+    code = proc.returncode
+    reader.join(timeout=1)
+    text = "\n".join(tail)
+    if code not in (0, None, -15, -2, 1) or ("bind" in text.lower() and "fail" in text.lower()):
+        if "address already in use" in text.lower() or "bind" in text.lower():
+            raise RuntimeError(f"Port {port} is already in use: is another `tlav worker` running on this computer? "
+                               f"Stop it, or start this one with `tlav worker --port {port + 10}`.")
+        raise RuntimeError("The AI engine stopped unexpectedly:\n  " + "\n  ".join(tail[-6:]))
+    print("  Stopped sharing this computer.")
 
 
 # ------------------------------------------------------------------ main side
@@ -243,17 +360,23 @@ def add_worker(address: str, token: Optional[str] = None, port: int = DISCOVERY_
     lat = reachable(w)
     w.pop("candidates", None)
     if lat is None:
-        raise ConnectionError(f"Cannot reach rpc-server at {w['endpoint']}. Is `tlav worker` running there?")
+        if replies:   # it answered the search, so it's the firewall blocking the engine port
+            raise ConnectionError(f"Found {w.get('hostname', host)}, but its firewall blocks Tlav.\n  "
+                                  + firewall_help((w.get("hardware") or {}).get("os_name"),
+                                                  int(w["endpoint"].rsplit(":", 1)[1]), port))
+        raise ConnectionError(f"Nothing answered at {w['endpoint']}. Check that `tlav worker` is running on that "
+                              "computer and that the address matches the one on its screen.\n  If it is, its "
+                              "firewall may be blocking Tlav (Windows asks the first time: click \"Allow access\").")
     w["latency_ms"] = round(lat, 2)
     workers = [x for x in saved_workers() if x["endpoint"] != w["endpoint"]] + [w]
     save_workers(workers)
     return w
 
 
-def relocate(workers: List[dict], timeout: float = 2.5, port: int = DISCOVERY_PORT) -> Dict[str, str]:
+def relocate(workers: List[dict], timeout: float = 2.5, port: Optional[int] = None) -> Dict[str, str]:
     """Find saved workers whose address changed (routers reassign them) by their computer name.
     Returns {old endpoint: new endpoint} and updates the saved list."""
-    found = scan(timeout=timeout, port=port)
+    found = scan(timeout=timeout, port=port or config.load_state().get("discovery_port") or DISCOVERY_PORT)
     by_name = {}
     for w in found:
         if reachable(w) is not None:
