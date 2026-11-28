@@ -28,6 +28,14 @@ TOOLS = ["llama-server", "llama-cli", "llama-quantize", "llama-perplexity", "lla
 ALIASES = {"rpc-server": ["rpc-server", "ggml-rpc-server"]}
 REPO = "ggml-org/llama.cpp"
 EXE = ".exe" if os.name == "nt" else ""
+# Every Tlav install uses this exact llama.cpp release, so computers set up on different days can
+# still share a model (a cluster needs identical engine builds). Tested with every model Tlav picks.
+# TLAV_LLAMA_TAG=latest takes the newest release instead (for a brand-new model architecture).
+PINNED_TAG = "b12791"
+
+
+def llama_tag() -> str:
+    return os.environ.get("TLAV_LLAMA_TAG", PINNED_TAG)
 
 
 class RuntimeMissing(RuntimeError):
@@ -134,19 +142,26 @@ def _ensure_cmake() -> str:
 
 
 def _fetch_source(dest: Path) -> Path:
+    tag = llama_tag()
     src = dest / "llama.cpp"
+    marker = src / ".tlav-tag"
     if src.exists():
-        return src
+        if marker.exists() and marker.read_text().strip() == tag:
+            return src
+        shutil.rmtree(src, ignore_errors=True)      # another version (or a half-finished download)
     if shutil.which("git"):
-        subprocess.check_call(["git", "clone", "--depth", "1", f"https://github.com/{REPO}", str(src)])
-        return src
-    url = f"https://codeload.github.com/{REPO}/tar.gz/refs/heads/master"
-    tgz = dest / "llama.tar.gz"
-    urllib.request.urlretrieve(url, tgz)
-    with tarfile.open(tgz) as t:
-        t.extractall(dest)  # trusted upstream archive
-    tgz.unlink()
-    (dest / "llama.cpp-master").rename(src)
+        cmd = ["git", "clone", "--depth", "1"] + ([] if tag == "latest" else ["--branch", tag])
+        subprocess.check_call(cmd + [f"https://github.com/{REPO}", str(src)])
+    else:
+        ref = "heads/master" if tag == "latest" else f"tags/{tag}"
+        tgz = dest / "llama.tar.gz"
+        urllib.request.urlretrieve(f"https://codeload.github.com/{REPO}/tar.gz/refs/{ref}", tgz)
+        with tarfile.open(tgz) as t:
+            top = t.getnames()[0].split("/")[0]
+            t.extractall(dest)  # trusted upstream archive
+        tgz.unlink()
+        (dest / top).rename(src)
+    marker.write_text(tag)
     return src
 
 
@@ -178,7 +193,7 @@ def build_from_source(hw: Hardware, jobs: Optional[int] = None) -> Path:
         for cand in (build / "bin" / (t + EXE), build / "bin" / "Release" / (t + EXE)):
             if cand.exists():
                 shutil.copy2(cand, out / cand.name)
-    config.save_state(runtime_bin=str(out), runtime_source="source")
+    config.save_state(runtime_bin=str(out), runtime_source="source:" + llama_tag())
     return out
 
 
@@ -192,26 +207,40 @@ def _asset_keywords(hw: Hardware) -> Optional[List[str]]:
     return None  # Intel macOS and others: build from source
 
 
+def _release_assets(tag: str, keys: List[str]) -> List[tuple]:
+    """(name, url) candidates for this platform: straight from the pinned release, no API call."""
+    if tag == "latest":
+        req = urllib.request.Request(f"https://api.github.com/repos/{REPO}/releases/latest",
+                                     headers={"User-Agent": "tlav", "Accept": "application/vnd.github+json"})
+        with urllib.request.urlopen(req, timeout=30) as r:
+            release = json.load(r)
+        return [(a["name"], a["browser_download_url"]) for k in keys for a in release.get("assets", [])
+                if k in a["name"] and a["name"].endswith((".zip", ".tar.gz"))]
+    return [(f"llama-{tag}-{k}{ext}", f"https://github.com/{REPO}/releases/download/{tag}/llama-{tag}-{k}{ext}")
+            for k in keys for ext in (".tar.gz", ".zip")]
+
+
 def install_prebuilt(hw: Hardware) -> Optional[Path]:
     keys = _asset_keywords(hw)
     if not keys:
         return None
-    req = urllib.request.Request(f"https://api.github.com/repos/{REPO}/releases/latest",
-                                 headers={"User-Agent": "tlav", "Accept": "application/vnd.github+json"})
-    with urllib.request.urlopen(req, timeout=30) as r:
-        release = json.load(r)
-    asset = None
-    for k in keys:
-        asset = next((a for a in release.get("assets", []) if k in a["name"]
-                      and a["name"].endswith((".zip", ".tar.gz"))), None)
-        if asset:
-            break
-    if not asset:
-        return None
+    import urllib.error
+    tag = llama_tag()
     rt = config.runtime_dir()
-    archive = rt / asset["name"]
-    print(f"Downloading {asset['name']} ...")
-    urllib.request.urlretrieve(asset["browser_download_url"], archive)
+    archive = None
+    for name, url in _release_assets(tag, keys):
+        dest = rt / name
+        try:
+            print(f"Downloading {name} ...")
+            urllib.request.urlretrieve(url, dest)
+            archive = dest
+            break
+        except urllib.error.HTTPError as e:
+            if e.code != 404:
+                raise
+    if not archive:
+        return None
+    release = {"tag_name": tag}
     target = rt / "prebuilt"
     shutil.rmtree(target, ignore_errors=True)
     if archive.name.endswith(".zip"):

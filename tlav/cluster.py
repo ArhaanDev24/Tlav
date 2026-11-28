@@ -80,7 +80,8 @@ def engine_mismatch(worker: dict) -> Optional[str]:
     theirs, ours = worker.get("engine"), runtime.engine_version()
     if theirs and ours and theirs != ours:
         return (f"{worker.get('hostname', worker['endpoint'])} runs AI engine build {theirs}, this PC runs {ours}. "
-                "Different builds can't share a model: run `tlav install-runtime` on both so they match.")
+                "Different builds can't share a model. On each computer, update Tlav (run the install command "
+                "from tlav.online again), then run `tlav install-runtime`, so both use the same build.")
     return None
 
 
