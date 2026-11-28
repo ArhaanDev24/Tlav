@@ -30,8 +30,8 @@ def test_model_bundles_its_helper_files(home):
     _touch(m / "Qwen-Q8_0.gguf.part", 3)
     files = remove.model_files()
     names = [f.name for f in files]
-    assert names == ["Qwen-Q4_K_M.gguf", "Qwen-f16.gguf", "Qwen-Q8_0.gguf"]   # helpers aren't listed alone
-    f16 = files[1]
+    assert names == ["Qwen-f16.gguf", "Qwen-Q4_K_M.gguf", "Qwen-Q8_0.gguf"]   # A-Z; helpers aren't listed alone
+    f16 = files[0]
     assert f16.size == 112 and len(f16.extras) == 2
     assert files[2].unfinished
 

@@ -1322,6 +1322,9 @@ def friendly_error(e: BaseException) -> str:
         if e.strerror and e.strerror.startswith("Not enough disk space"):
             return e.strerror
         return "The disk is full. Free some space (or pick a smaller model) and run the same command again."
+    if isinstance(e, json.JSONDecodeError):
+        return ("Got an answer Tlav couldn't read (often a Wi-Fi login page or a network filter in the way). "
+                "Open any website to check you're online, then run the same command again.")
     if isinstance(e, KeyError):
         return str(e).strip("'\"")
     return str(e)

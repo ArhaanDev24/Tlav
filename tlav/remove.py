@@ -64,9 +64,10 @@ def model_files() -> List[ModelFile]:
     d = _home() / "models"
     if not d.is_dir():
         return []
-    finished = sorted(p for p in d.glob("*.gguf") if ".imatrix" not in p.name)
+    by_name = lambda p: p.name.lower()      # the same A-Z order on every system
+    finished = sorted((p for p in d.glob("*.gguf") if ".imatrix" not in p.name), key=by_name)
     names = {p.name for p in finished}
-    parts = sorted(p for p in d.glob("*.gguf.part") if p.name[:-len(".part")] not in names)
+    parts = sorted((p for p in d.glob("*.gguf.part") if p.name[:-len(".part")] not in names), key=by_name)
     return [ModelFile(p) for p in finished + parts]
 
 
