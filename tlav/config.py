@@ -2,6 +2,7 @@
 
 import json
 import os
+import time
 from pathlib import Path
 
 
@@ -37,5 +38,16 @@ def load_state() -> dict:
 def save_state(**updates) -> dict:
     state = load_state()
     state.update(updates)
-    _state_file().write_text(json.dumps(state, indent=2))
+    # write a new file and swap it in: a crash or power cut never leaves a half-written state.json
+    path = _state_file()
+    tmp = path.with_name(f".state.{os.getpid()}.tmp")
+    tmp.write_text(json.dumps(state, indent=2))
+    for attempt in range(20):
+        try:
+            os.replace(tmp, path)
+            break
+        except PermissionError:          # Windows: another Tlav process has it open for a moment
+            if attempt == 19:
+                raise
+            time.sleep(0.05)
     return state

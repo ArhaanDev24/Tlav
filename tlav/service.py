@@ -31,8 +31,9 @@ def _paths(role: str) -> dict:
 
 
 def launchd_plist(role: str, cmd: List[str], log_dir: Path) -> str:
-    args = "\n".join(f"    <string>{a}</string>" for a in cmd)
-    env = "".join(f"    <key>{k}</key><string>{v}</string>\n" for k, v in os.environ.items()
+    from xml.sax.saxutils import escape   # a path with & or < would make the file unreadable
+    args = "\n".join(f"    <string>{escape(a)}</string>" for a in cmd)
+    env = "".join(f"    <key>{k}</key><string>{escape(v)}</string>\n" for k, v in os.environ.items()
                   if k in ("TLAV_HOME", "HF_TOKEN", "PATH"))
     return f"""<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -55,6 +56,13 @@ def launchd_plist(role: str, cmd: List[str], log_dir: Path) -> str:
 """
 
 
+def _systemd_quote(arg: str) -> str:
+    """systemd splits ExecStart on spaces: quote paths like '/home/me/My Files/...'."""
+    if arg and not any(c in arg for c in ' "\\\t'):
+        return arg
+    return '"' + arg.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
 def systemd_unit(role: str, cmd: List[str]) -> str:
     env = "".join(f"Environment={k}={v}\n" for k, v in os.environ.items() if k in ("TLAV_HOME", "HF_TOKEN"))
     return f"""[Unit]
@@ -62,7 +70,7 @@ Description=Tlav local AI ({role})
 After=network-online.target
 
 [Service]
-ExecStart={' '.join(cmd)}
+ExecStart={' '.join(_systemd_quote(a) for a in cmd)}
 {env}Restart=on-failure
 RestartSec=10
 

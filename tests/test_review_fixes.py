@@ -103,3 +103,41 @@ def test_source_checkout_of_another_version_is_replaced(tmp_path, monkeypatch):
     cloned.clear()
     runtime._fetch_source(tmp_path)          # same version: reused, not downloaded again
     assert not cloned
+
+
+def test_state_survives_a_crash_mid_write(tmp_path, monkeypatch):
+    from tlav import config
+    monkeypatch.setenv("TLAV_HOME", str(tmp_path))
+    config.save_state(active={"path": "/m.gguf"}, cluster=[{"endpoint": "10.0.0.5:50052"}])
+    real = config.os.replace
+    def crash(*a):
+        raise KeyboardInterrupt          # power cut / Ctrl+C at the worst moment
+    monkeypatch.setattr(config.os, "replace", crash)
+    with pytest.raises(KeyboardInterrupt):
+        config.save_state(server_pid=123)
+    monkeypatch.setattr(config.os, "replace", real)
+    state = config.load_state()
+    assert state["active"]["path"] == "/m.gguf" and state["cluster"]   # nothing lost
+
+
+def test_worker_from_a_newer_tlav_doesnt_crash_the_main_computer():
+    from tlav import hardware
+    hw = hardware.from_dict({"ram_total_gb": 16, "physical_cores": 4, "os_name": "Windows",
+                             "a_field_from_the_future": True})
+    assert hw.ram_total_gb == 16 and hw.os_name == "Windows"
+
+
+def test_bandwidth_test_fits_a_low_memory_pc(monkeypatch):
+    from tlav import benchmark, hardware
+    monkeypatch.setattr(hardware, "_ram", lambda: (2.0, 0.4))     # 2 GB PC, 400 MB free
+    assert benchmark._test_size_mb() <= 64
+
+
+def test_login_services_survive_unusual_paths():
+    import xml.dom.minidom
+    from pathlib import Path
+    from tlav import service
+    unit = service.systemd_unit("worker", ["/home/me/My Files/python", "-m", "tlav", "worker"])
+    assert 'ExecStart="/home/me/My Files/python" -m tlav worker' in unit
+    plist = service.launchd_plist("worker", ["/Users/R&D <team>/python", "-m", "tlav"], Path("/tmp"))
+    xml.dom.minidom.parseString(plist)          # valid XML: macOS can load it

@@ -251,8 +251,20 @@ def simulated(ram_gb: float, cores: int = 4, simd: str = "avx2", gpu: str = "non
 
 
 def from_dict(d: Optional[dict]) -> Optional[Hardware]:
+    """A Hardware from what a worker sent. Tolerates other Tlav versions: unknown fields are
+    ignored and missing ones get safe defaults (a cluster can mix versions)."""
     if not d:
         return None
-    d = dict(d)
-    d.pop("simd", None)
-    return Hardware(**d)
+    import dataclasses
+    fields = {f.name: f for f in dataclasses.fields(Hardware)}
+    defaults = {"os_name": "Linux", "os_version": "", "arch": "x86_64", "cpu_model": "", "physical_cores": 2,
+                "logical_cores": 4, "cpu_flags": [], "ram_total_gb": 8.0, "ram_available_gb": 5.0,
+                "disk_free_gb": 0.0, "gpu": "none", "gpu_name": "", "gpu_vram_gb": 0.0}
+    kw = {k: v for k, v in d.items() if k in fields}
+    for name, f in fields.items():
+        if name not in kw and f.default is dataclasses.MISSING and f.default_factory is dataclasses.MISSING:
+            kw[name] = defaults.get(name, "")
+    try:
+        return Hardware(**kw)
+    except TypeError:
+        return None

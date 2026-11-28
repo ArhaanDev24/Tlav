@@ -22,10 +22,28 @@ from . import config
 DECODE_EFFICIENCY = 1.0
 
 
-def memory_bandwidth_gbps(size_mb: int = 256, rounds: int = 6) -> float:
-    size = size_mb * 1024 * 1024
-    src = bytearray(size)
-    dst = bytearray(size)
+def _test_size_mb(want: int = 256) -> int:
+    """Two buffers of this size are needed; keep them small on PCs with little free memory."""
+    try:
+        from .hardware import _ram
+        avail_gb = _ram()[1]
+        return max(32, min(want, int(avail_gb * 1024 / 8)))
+    except Exception:  # noqa: BLE001
+        return 64
+
+
+def memory_bandwidth_gbps(size_mb: Optional[int] = None, rounds: int = 6) -> float:
+    size_mb = size_mb or _test_size_mb()
+    while True:
+        try:
+            size = size_mb * 1024 * 1024
+            src = bytearray(size)
+            dst = bytearray(size)
+            break
+        except MemoryError:
+            if size_mb <= 16:
+                raise
+            size_mb //= 2
     for i in range(0, size, 4096):  # touch pages so the OS really allocates them
         src[i] = 1
     best = float("inf")
