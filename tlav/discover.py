@@ -8,6 +8,7 @@ score estimated from the hand-scored catalog (see catalog.estimate_quality).
 """
 
 import json
+import os
 import re
 import time
 import urllib.parse
@@ -41,7 +42,7 @@ REFRESH_DAYS = 7
 
 
 def _get(url: str):
-    with urllib.request.urlopen(_request(url), timeout=30) as r:
+    with urllib.request.urlopen(_request(url), timeout=15) as r:
         return json.load(r)
 
 
@@ -146,13 +147,20 @@ def update(progress=print) -> List[dict]:
     progress(f"  {len(cands)} new original models from trusted publishers; reading their file headers...")
     with ThreadPoolExecutor(max_workers=8) as ex:
         found = [m for m in ex.map(measure, cands) if m]
+    if cands and not found:
+        # Every header read failed (a flaky connection): keep the models already found
+        # rather than saving an empty list for the next week.
+        raise ConnectionError("couldn't read any model files from Hugging Face")
     ids = set()
     out = []
     for m in sorted(found, key=lambda m: -m["downloads"]):
         if m["id"] not in ids:
             ids.add(m["id"])
             out.append(m)
-    (config.home() / "discovered.json").write_text(json.dumps({"updated": time.time(), "models": out}, indent=1))
+    path = config.home() / "discovered.json"
+    tmp = path.with_name(".discovered.json.tmp")
+    tmp.write_text(json.dumps({"updated": time.time(), "models": out}, indent=1))
+    os.replace(tmp, path)
     return out
 
 
@@ -171,9 +179,14 @@ def refresh_if_stale(progress=print) -> None:
     age = age_days()
     if age is not None and age < REFRESH_DAYS:
         return
+    failed = config.load_state().get("discover_failed_at", 0)
+    if time.time() - failed < 12 * 3600:
+        return            # it failed recently (bad connection): don't slow every start, try again later
     progress("  Looking for newly released models on Hugging Face...")
     try:
         n = len(update(progress))
         progress(f"  {n} new models added to the search.")
+        config.save_state(discover_failed_at=0)
     except Exception as e:
+        config.save_state(discover_failed_at=time.time())
         progress(f"  (couldn't check for new models: {str(e)[:60]}; using the ones Tlav already knows)")

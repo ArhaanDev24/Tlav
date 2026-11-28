@@ -163,3 +163,51 @@ def test_interrupted_compression_never_leaves_a_file_that_looks_finished(tmp_pat
     with pytest.raises(RuntimeError):
         compress.quantize(src, "Q4_K_M", 2)
     assert not (tmp_path / "M-Q4_K_M.gguf").exists()                         # so it isn't reused next time
+
+
+def test_a_damaged_downloaded_catalog_doesnt_break_tlav(tmp_path, monkeypatch):
+    from tlav import catalog
+    monkeypatch.setenv("TLAV_HOME", str(tmp_path))
+    n = len(catalog.load(include_discovered=False))
+    (tmp_path / "catalog.json").write_text('{"models": [{"id": "half-writ')       # interrupted download
+    assert len(catalog.load(include_discovered=False)) == n
+    (tmp_path / "catalog.json").write_text('{"models": [{"id": "x"}]}')            # an old/incompatible format
+    assert len(catalog.load(include_discovered=False)) == n
+
+
+def test_an_old_downloaded_catalog_never_hides_newer_models(tmp_path, monkeypatch):
+    import json
+    from tlav import catalog
+    monkeypatch.setenv("TLAV_HOME", str(tmp_path))
+    bundled = json.loads(catalog.BUNDLED.read_text())
+    old = dict(bundled, models=bundled["models"][:3] + [dict(bundled["models"][0], id="only-in-download")])
+    (tmp_path / "catalog.json").write_text(json.dumps(old))
+    ids = {m.id for m in catalog.load(include_discovered=False)}
+    assert {m["id"] for m in bundled["models"]} <= ids and "only-in-download" in ids
+
+
+def test_a_flaky_connection_doesnt_wipe_discovered_models(tmp_path, monkeypatch):
+    import json
+    from tlav import discover
+    monkeypatch.setenv("TLAV_HOME", str(tmp_path))
+    saved = {"updated": 1, "models": [{"id": "found-last-week"}]}
+    (tmp_path / "discovered.json").write_text(json.dumps(saved))
+    monkeypatch.setattr(discover, "list_candidates", lambda: {"x": {"repo": "a/b", "base": "qwen/x",
+                                                                 "created": "", "downloads": 1}})
+    monkeypatch.setattr(discover, "measure", lambda entry: None)        # every header read fails
+    with pytest.raises(ConnectionError):
+        discover.update(progress=lambda *a: None)
+    assert json.loads((tmp_path / "discovered.json").read_text()) == saved
+
+
+def test_failed_model_search_isnt_retried_on_every_start(tmp_path, monkeypatch):
+    from tlav import discover
+    monkeypatch.setenv("TLAV_HOME", str(tmp_path))
+    calls = []
+    def offline(progress=print):
+        calls.append(1)
+        raise ConnectionError("no internet")
+    monkeypatch.setattr(discover, "update", offline)
+    discover.refresh_if_stale(progress=lambda *a: None)
+    discover.refresh_if_stale(progress=lambda *a: None)
+    assert len(calls) == 1

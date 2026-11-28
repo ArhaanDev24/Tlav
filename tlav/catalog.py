@@ -195,7 +195,7 @@ def _catalog_path() -> Path:
             return override
     except OSError:
         pass
-    return Path(__file__).parent / "data" / "catalog.json"
+    return BUNDLED
 
 
 def _discovered_path() -> Optional[Path]:
@@ -207,11 +207,31 @@ def _discovered_path() -> Optional[Path]:
         return None
 
 
-def load(include_discovered: bool = True) -> List[Model]:
-    """Curated catalog plus models found on Hugging Face by `tlav models --update`."""
+BUNDLED = Path(__file__).parent / "data" / "catalog.json"
+
+
+def _read_models(path: Path) -> Optional[List[Model]]:
+    """The models in a catalog file, or None if it's damaged or from an incompatible version."""
     fields = set(Model.__dataclass_fields__)
-    data = json.loads(_catalog_path().read_text())
-    models = [Model(**{k: v for k, v in m.items() if k in fields}) for m in data["models"]]
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return [Model(**{k: v for k, v in m.items() if k in fields}) for m in data["models"]]
+    except (OSError, ValueError, TypeError, KeyError, AttributeError):
+        return None
+
+
+def load(include_discovered: bool = True) -> List[Model]:
+    """Curated catalog plus models found on Hugging Face by `tlav models --update`.
+
+    The catalog that ships with this version of Tlav is the base (`tlav update` keeps it current);
+    a downloaded catalog only adds models it doesn't have, so an old download can never hide newer
+    entries, and a damaged one is ignored instead of breaking every command."""
+    fields = set(Model.__dataclass_fields__)
+    models = _read_models(BUNDLED) or []
+    override = _catalog_path()
+    if override != BUNDLED:
+        known = {m.id for m in models}
+        models += [m for m in (_read_models(override) or []) if m.id not in known]
     path = _discovered_path() if include_discovered else None
     if path:
         try:
@@ -221,9 +241,13 @@ def load(include_discovered: bool = True) -> List[Model]:
         ids = {m.id for m in models}
         bases = {(m.base or "").lower() for m in models}
         for m in extra:
-            if m.get("id") not in ids and (m.get("base") or "").lower() not in bases:
+            if not isinstance(m, dict) or m.get("id") in ids or (m.get("base") or "").lower() in bases:
+                continue
+            try:
                 models.append(Model(**{k: v for k, v in m.items() if k in fields}))
-                ids.add(m["id"])
+            except TypeError:      # written by an older Tlav without a field this version needs
+                continue
+            ids.add(m["id"])
     return models
 
 
@@ -245,5 +269,8 @@ def update(url: str = CATALOG_URL) -> int:
         data = json.loads(r.read())
     if not isinstance(data.get("models"), list) or not data["models"]:
         raise ValueError("downloaded catalog is empty or malformed")
-    (config.home() / "catalog.json").write_text(json.dumps(data, indent=1))
+    path = config.home() / "catalog.json"
+    tmp = path.with_name(".catalog.json.tmp")
+    tmp.write_text(json.dumps(data, indent=1))
+    os.replace(tmp, path)
     return len(data["models"])
