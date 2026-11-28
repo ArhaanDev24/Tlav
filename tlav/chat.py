@@ -533,6 +533,10 @@ class Chat:
         print(f"  {accent('■')} {bold('Tlav')}  {line}")
         extra = f" · reasoning {'on' if self.think else 'off'}" if self.reasons else ""
         print(dim(f"    {i.get('where', 'this PC')} · {self.ctx} tokens of memory · offline{extra}"))
+        from .update import cached_newer
+        latest = cached_newer()
+        if latest:
+            print(dim(f"    Tlav {latest} is out: after this chat, type  tlav update"))
         print(dim("    Type a message. /help for commands, Ctrl+C stops an answer.\n"))
 
     def ask(self, text: str) -> None:

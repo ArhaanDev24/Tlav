@@ -23,3 +23,4 @@ pytest
 - Keep it honest: speeds and quality numbers in docs must be measured, not assumed.
 - Add a test for every bug fix (`tests/`), and keep `pytest` green on Linux, macOS and Windows.
 - Terminal output must still work with `NO_COLOR=1`, when piped, and on old Windows consoles.
+- **Releasing:** bump the version in both `tlav/__init__.py` and `pyproject.toml` (a test checks they match). Installed copies compare that number to offer the update, so a change people should get needs a new number.

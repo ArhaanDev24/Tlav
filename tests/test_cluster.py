@@ -106,7 +106,7 @@ def test_engine_mismatch(monkeypatch):
     monkeypatch.setattr(runtime, "engine_version", lambda: "aaa111")
     assert cluster.engine_mismatch({"endpoint": "x:1", "engine": "aaa111"}) is None
     assert cluster.engine_mismatch({"endpoint": "x:1"}) is None             # older worker: unknown
-    assert "install-runtime" in cluster.engine_mismatch({"endpoint": "x:1", "hostname": "pc2", "engine": "bbb222"})
+    assert "tlav update" in cluster.engine_mismatch({"endpoint": "x:1", "hostname": "pc2", "engine": "bbb222"})
 
 
 def test_relocate_follows_worker_by_name(monkeypatch):

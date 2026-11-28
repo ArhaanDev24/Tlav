@@ -231,9 +231,28 @@ A bigger model compressed to Q4_K_M almost always beats a smaller model kept at 
 | `tlav install-runtime` | Install/rebuild llama.cpp tuned for this CPU |
 | `tlav list` | Downloaded models |
 | `tlav remove [NAME…]` / `--all` | Delete downloaded models to free disk space (Tlav stays installed); with no name it lists them and asks |
+| `tlav update [-y]` | Get the newest Tlav and the matching AI engine |
 | `tlav uninstall [--keep-models]` | Remove Tlav completely: models, AI engine, chats, settings, startup services and the `tlav` command |
 
 Everything lives in `~/.tlav` (change it with `TLAV_HOME`).
+
+### Updating
+
+Tlav checks for a new version at most once a day (one tiny file, and it gives up after 1.5 seconds, so it never slows the start). When one is out, plain `tlav` asks once:
+
+```
+  ? Tlav 0.5.0 is out (you have 0.4.0). Update now? [Y/n]
+```
+
+Say yes and it updates itself, plus the AI engine if the new version uses a different build, so computers in a cluster keep matching. Say no and it won't ask about that version again (the chat shows a quiet reminder). Any time:
+
+```bash
+tlav update
+```
+
+Helper computers show the same notice on their `tlav worker` screen: update them too, so every computer in a cluster runs the same version. `TLAV_NO_UPDATE_CHECK=1` turns the check off.
+
+**Installed before version 0.4.0?** Those copies can't check for updates yet. Run the install command once more (it keeps your models and settings), and from then on Tlav tells you itself.
 
 ### Removing models, or Tlav itself
 

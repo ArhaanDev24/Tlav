@@ -119,6 +119,7 @@ Type `tlav worker` on each spare computer, then `tlav cluster` on your main one.
 | `tlav worker` | Lend this PC to a cluster |
 | `tlav cluster` | Find your helper computers and use them |
 | `tlav stop` | Free the memory |
+| `tlav update` | Get the newest Tlav (it also tells you when one is out) |
 | `tlav remove` | Delete models you no longer need |
 | `tlav uninstall` | Remove Tlav completely |
 

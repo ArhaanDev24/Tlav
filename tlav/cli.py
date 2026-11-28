@@ -112,6 +112,9 @@ def cmd_doctor(args):
     rt = runtime.status()
     print("\nRuntime (llama.cpp):", "installed" if rt["llama-server"] else "not installed (`tlav install-runtime`)")
     print("Cluster support:    ", "yes" if rt["rpc-server"] else "no (reinstall runtime: `tlav install-runtime`)")
+    from . import update
+    latest = update.check()
+    print("Tlav:               ", __version__ + (f" (Tlav {latest} is out: `tlav update`)" if latest else ""))
     workers = cluster.saved_workers()
     if workers:
         print(f"Cluster workers:     {len(workers)} saved ({', '.join(w['endpoint'] for w in workers)})")
@@ -223,6 +226,14 @@ def cmd_search(args):
 # ------------------------------------------------------------------ runtime
 
 def cmd_install_runtime(args):
+    if getattr(args, "if_changed", False):
+        # after `tlav update`: replace the engine only when this version pins a different build
+        if not runtime.find("llama-server"):
+            return                     # not installed yet: setup installs the right one
+        if (config.load_state().get("runtime_source") or "").endswith(":" + runtime.llama_tag()):
+            print("  The AI engine already matches this version.")
+            return
+        print("  This version uses a newer AI engine build; updating it so your computers keep working together.")
     hw = hardware.detect()
     note = runtime.platform_note(hw)
     if note:
@@ -522,8 +533,52 @@ def cmd_welcome(args):
     ])
 
 
+def _offer_update() -> bool:
+    """Ask once per new version, at the start of plain `tlav` / `tlav chat`.
+    True means Tlav was just updated: stop here, the new version runs next time."""
+    from . import update
+    if not (sys.stdin.isatty() and sys.stdout.isatty()) or not update.installed_by_installer():
+        return False
+    latest = update.check()
+    if not latest or not update.should_ask(latest):
+        return False
+    if ui.ask(f"Tlav {latest} is out (you have {__version__}). Update now?"):
+        if update.run_update():
+            print(f"  Updated to Tlav {latest}. Type `tlav` to start it.")
+        return True
+    update.declined(latest)
+    print(ui.c(ui.DIM, "  Any time:  tlav update"))
+    return False
+
+
+def cmd_update(args):
+    """`tlav update`: get the newest version (and the matching AI engine)."""
+    import time as _time
+    from . import update
+    print(f"  You have Tlav {__version__}.")
+    latest = update.latest_version()
+    if latest is None:
+        sys.exit("Couldn't check for updates right now (no internet?). Try again later.")
+    config.save_state(update_check={"at": _time.time(), "latest": latest})
+    if not update.newer(latest):
+        print("  That's the newest version.")
+        return
+    print(f"  Tlav {latest} is out. What changed: https://github.com/ArhaanDev24/Tlav/commits/main")
+    if not update.installed_by_installer():
+        print("  This copy was installed with pip, so update it the same way:")
+        print(f"    pip install --upgrade {update.SOURCE}")
+        return
+    if not args.yes and not ui.ask("Update now?"):
+        update.declined(latest)
+        return
+    if update.run_update():
+        print(f"  Updated to Tlav {latest}. Type `tlav` to start it.")
+
+
 def cmd_open(args):
     """Plain `tlav`: start the set-up model if needed, then ask terminal or web."""
+    if _offer_update():
+        return
     if not config.load_state().get("active"):
         sys.exit("No model set up yet. Type `tlav` (or `tlav setup`) and Tlav picks and installs one.")
     st = server.status()
@@ -727,6 +782,8 @@ def cmd_chat(args):
         _launch(path, s, "127.0.0.1", args.port, False, detach=True, quiet=True)
         info = chat.file_info(str(path), ctx=s["ctx"], est_tps=plan.est_tps if plan else None)
         return _open_chat(config.load_state()["server_url"], args.system, info, think)
+    if _offer_update():
+        return
     st = server.status()
     url = st["url"] if st["running"] else None
     if not url:
@@ -1187,7 +1244,12 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("install-runtime", help="install llama.cpp tuned for this CPU")
     s.add_argument("--source", action="store_true", help="always build from source")
     s.add_argument("--prebuilt", action="store_true", help="only use prebuilt binaries")
+    s.add_argument("--if-changed", action="store_true", help=argparse.SUPPRESS)
     s.set_defaults(func=cmd_install_runtime)
+
+    s = sub.add_parser("update", help="get the newest Tlav (it also tells you when one is out)")
+    s.add_argument("-y", "--yes", action="store_true", help="don't ask before updating")
+    s.set_defaults(func=cmd_update)
 
     s = sub.add_parser("setup", help="do everything: detect, benchmark, pick, compress, run")
     plan_opts(s)

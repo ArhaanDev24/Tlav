@@ -80,8 +80,7 @@ def engine_mismatch(worker: dict) -> Optional[str]:
     theirs, ours = worker.get("engine"), runtime.engine_version()
     if theirs and ours and theirs != ours:
         return (f"{worker.get('hostname', worker['endpoint'])} runs AI engine build {theirs}, this PC runs {ours}. "
-                "Different builds can't share a model. On each computer, update Tlav (run the install command "
-                "from tlav.online again), then run `tlav install-runtime`, so both use the same build.")
+                "Different builds can't share a model: run `tlav update` on both computers so they match.")
     return None
 
 
@@ -211,6 +210,11 @@ def run_worker(host: Optional[str] = None, port: int = RPC_PORT, token: Optional
         f"{info['hostname']} · {hw.ram_total_gb:.0f} GB RAM · {hw.physical_cores} cores · address {addr}",
         "On your main computer, type:   tlav cluster",
         "If it isn't found:   tlav cluster add " + addr])
+    from . import update
+    latest = update.check()
+    if latest:
+        print(ui.c(ui.ORANGE, f"  ! Tlav {latest} is out. Helpers should match the main computer:")
+              + "\n    press Ctrl+C, run `tlav update`, then `tlav worker` again.\n")
     if not chosen and host.startswith("127."):
         print(ui.c(ui.ORANGE, "  ! This computer isn't connected to a network, so no other computer can reach it.")
               + "\n    Connect it to Wi-Fi or Ethernet, then run `tlav worker` again.\n")
