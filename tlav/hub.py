@@ -70,11 +70,20 @@ def download(repo: str, filename: str, dest_dir: Optional[Path] = None, quiet: b
             return dest
     import socket
     import urllib.error
+    part = dest.with_suffix(dest.suffix + ".part")
     for attempt in range(retries + 1):
         try:
             return _download_once(repo, filename, dest, quiet)
-        except urllib.error.HTTPError:
-            raise                      # missing/private file: retrying won't help
+        except urllib.error.HTTPError as e:
+            if e.code == 416 and part.exists() and (not filename.endswith(".gguf") or _looks_like_gguf(part)):
+                part.rename(dest)      # it had all arrived; only the final rename was missed
+                return dest
+            if e.code not in (429, 500, 502, 503, 504) or attempt == retries:
+                raise                  # missing/private file: retrying won't help
+            wait = 2 ** (attempt + 1)
+            if not quiet:
+                sys.stderr.write(f"\n  Hugging Face is busy ({e.code}); trying again in {wait}s...\n")
+            time.sleep(wait)
         except (urllib.error.URLError, socket.timeout, TimeoutError, ConnectionError, IOError) as e:
             if attempt == retries or getattr(e, "errno", None) == 28:   # 28 = disk full
                 raise

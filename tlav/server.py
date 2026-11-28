@@ -20,7 +20,11 @@ def port_free(host: str, port: int) -> bool:
     import socket
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
-        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        if os.name == "nt":
+            # On Windows SO_REUSEADDR lets two programs share a port; ask for it exclusively instead.
+            s.setsockopt(socket.SOL_SOCKET, getattr(socket, "SO_EXCLUSIVEADDRUSE", -5), 1)
+        else:
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         s.bind(("0.0.0.0" if host == "0.0.0.0" else host, port))
         return True
     except OSError:
@@ -165,8 +169,9 @@ def pid_alive(pid: Optional[int]) -> bool:
     if not pid:
         return False
     if os.name == "nt":
-        out = subprocess.run(["tasklist", "/FI", f"PID eq {pid}"], capture_output=True, text=True).stdout
-        return str(pid) in out
+        out = subprocess.run(["tasklist", "/FI", f"PID eq {pid}", "/FO", "CSV", "/NH"],
+                             capture_output=True, text=True).stdout
+        return f'"{pid}"' in out
     try:
         # reap it if we started it ourselves (a finished child stays a "zombie" until reaped)
         if os.waitpid(pid, os.WNOHANG)[0] == pid:
@@ -222,7 +227,7 @@ def get_json(url: str) -> Optional[dict]:
 def status() -> dict:
     st = config.load_state()
     pid, url = st.get("server_pid"), st.get("server_url")
-    alive = pid_alive(pid)
+    alive = pid_alive(pid) and is_engine(pid)
     info = {"running": bool(alive and url and healthy(url)), "pid": pid if alive else None, "url": url,
             "active": st.get("active")}
     if alive:
@@ -234,10 +239,30 @@ def status() -> dict:
     return info
 
 
+def is_engine(pid: Optional[int]) -> bool:
+    """Is this process really Tlav's llama-server? (A saved PID can be reused by another program.)"""
+    if not pid:
+        return False
+    try:
+        if os.name == "nt":
+            out = subprocess.run(["tasklist", "/FI", f"PID eq {pid}", "/FO", "CSV", "/NH"],
+                                 capture_output=True, text=True).stdout.lower()
+            return "llama-server" in out
+        cmdline = f"/proc/{pid}/cmdline"
+        if os.path.exists(cmdline):
+            return b"llama-server" in open(cmdline, "rb").read()
+        out = subprocess.run(["ps", "-o", "command=", "-p", str(pid)], capture_output=True, text=True).stdout
+        return "llama-server" in out
+    except OSError:
+        return True   # can't tell: fall back to trusting the saved PID
+
+
 def stop() -> bool:
     st = config.load_state()
     pid = st.get("server_pid")
-    if not pid_alive(pid):
+    if not pid_alive(pid) or not is_engine(pid):
+        if pid:
+            config.save_state(server_pid=None)   # it's gone (or the number now belongs to another program)
         return False
     if os.name == "nt":
         subprocess.run(["taskkill", "/PID", str(pid), "/F"], capture_output=True)
