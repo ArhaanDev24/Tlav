@@ -141,3 +141,25 @@ def test_login_services_survive_unusual_paths():
     assert 'ExecStart="/home/me/My Files/python" -m tlav worker' in unit
     plist = service.launchd_plist("worker", ["/Users/R&D <team>/python", "-m", "tlav"], Path("/tmp"))
     xml.dom.minidom.parseString(plist)          # valid XML: macOS can load it
+
+
+def test_interrupted_compression_never_leaves_a_file_that_looks_finished(tmp_path, monkeypatch):
+    from tlav import compress, runtime
+    monkeypatch.setenv("TLAV_HOME", str(tmp_path))
+    src = tmp_path / "M-f16.gguf"
+    src.write_bytes(b"GGUF" + b"\0" * 100)
+    monkeypatch.setattr(runtime, "require", lambda tool: "/bin/quantize")
+    def killed(cmd, **kw):
+        open(cmd[-3], "wb").write(b"GGUF half-written")   # the tool got halfway...
+        raise KeyboardInterrupt                             # ...then Ctrl+C / crash
+    monkeypatch.setattr(compress.subprocess, "run", killed)
+    with pytest.raises(KeyboardInterrupt):
+        compress.quantize(src, "Q4_K_M", 2)
+    assert sorted(p.name for p in tmp_path.glob("M-*")) == ["M-f16.gguf"]     # nothing left behind
+    def fails(cmd, **kw):
+        open(cmd[-3], "wb").write(b"GGUF broken")
+        return compress.subprocess.CompletedProcess(cmd, 1)
+    monkeypatch.setattr(compress.subprocess, "run", fails)
+    with pytest.raises(RuntimeError):
+        compress.quantize(src, "Q4_K_M", 2)
+    assert not (tmp_path / "M-Q4_K_M.gguf").exists()                         # so it isn't reused next time

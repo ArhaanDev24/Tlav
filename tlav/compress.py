@@ -9,6 +9,7 @@ worse than the tolerance (default 3%). Q8_0/Q6_K typically land under 0.5%,
 Q5_K_M around 1%, Q4_K_M around 2-3%.
 """
 
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -18,6 +19,21 @@ from . import catalog, config, hub, runtime
 
 EVAL_TEXT = Path(__file__).parent / "data" / "eval.txt"      # used only to *measure* quality
 CALIB_TEXT = Path(__file__).parent / "data" / "calib.txt"    # used only to *tune* compression
+
+
+def _partial(out: Path) -> Path:
+    """Where a tool writes before the result is known to be complete: 'X.gguf' -> 'X.partial.gguf'.
+    (The extension stays, since some tools pick the file format from it.) Renamed only on success,
+    so an interrupted run never leaves a half-written file that looks finished."""
+    return out.with_name(out.stem + ".partial" + out.suffix)
+
+
+def _finish(tmp: Path, out: Path, ok: bool) -> bool:
+    if ok and tmp.exists():
+        os.replace(tmp, out)
+        return True
+    tmp.unlink(missing_ok=True)
+    return False
 
 
 def importance_matrix(src: Path, threads: int, text: Path = CALIB_TEXT) -> Optional[Path]:
@@ -34,11 +50,16 @@ def importance_matrix(src: Path, threads: int, text: Path = CALIB_TEXT) -> Optio
         return out
     log = config.home() / "compress.log"
     print(f"Measuring weight importance on calibration text (details in {log}) ...")
-    cmd = [exe, "-m", str(src), "-f", str(text), "-o", str(out), "-c", "256", "-t", str(threads),
+    tmp = _partial(out)
+    cmd = [exe, "-m", str(src), "-f", str(text), "-o", str(tmp), "-c", "256", "-t", str(threads),
            "-b", "256"]
-    with open(log, "a") as f:
-        res = subprocess.run(cmd, stdout=f, stderr=subprocess.STDOUT)
-    return out if res.returncode == 0 and out.exists() else None
+    try:
+        with open(log, "a") as f:
+            res = subprocess.run(cmd, stdout=f, stderr=subprocess.STDOUT)
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
+    return out if _finish(tmp, out, res.returncode == 0) else None
 
 
 def quantize(src: Path, quant: str, threads: int, out: Optional[Path] = None,
@@ -53,12 +74,17 @@ def quantize(src: Path, quant: str, threads: int, out: Optional[Path] = None,
         cmd.append("--allow-requantize")  # source already quantized (e.g. Q8_0)
     if imatrix:
         cmd += ["--imatrix", str(imatrix)]
-    cmd += [str(src), str(out), quant, str(threads)]
+    tmp = _partial(out)
+    cmd += [str(src), str(tmp), quant, str(threads)]
     log = config.home() / "compress.log"
     print(f"Compressing {src.name} -> {out.name} (details in {log}) ...")
-    with open(log, "a") as f:
-        res = subprocess.run(cmd, stdout=f, stderr=subprocess.STDOUT)
-    if res.returncode != 0:
+    try:
+        with open(log, "a") as f:
+            res = subprocess.run(cmd, stdout=f, stderr=subprocess.STDOUT)
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
+    if not _finish(tmp, out, res.returncode == 0):
         raise RuntimeError(f"llama-quantize failed; see {log}")
     return out
 
@@ -102,10 +128,15 @@ def kld_base(source: Path, threads: int, ctx: int = 256, chunks: int = 4) -> Opt
     out = source.parent / (source.stem + ".logits")
     if out.exists():
         return out
+    tmp = _partial(out)
     cmd = [exe, "-m", str(source), "-f", str(EVAL_TEXT), "-c", str(ctx), "--chunks", str(chunks),
-           "-t", str(threads), "-b", str(ctx), "--kl-divergence-base", str(out)]
-    res = subprocess.run(cmd, capture_output=True, text=True)
-    return out if res.returncode == 0 and out.exists() else None
+           "-t", str(threads), "-b", str(ctx), "--kl-divergence-base", str(tmp)]
+    try:
+        res = subprocess.run(cmd, capture_output=True, text=True)
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
+    return out if _finish(tmp, out, res.returncode == 0) else None
 
 
 def kld(model: Path, base: Path, threads: int) -> Optional[dict]:
@@ -140,16 +171,21 @@ def compress_to_size(source: Path, target_gb: float, threads: int, use_imatrix: 
     mib = int(target_gb * 1024)
     out = source.parent / f"{base}-fit{target_gb:.2f}G{'-imat' if imat else ''}.gguf"
     if not out.exists():
+        tmp = _partial(out)
         cmd = [q] + (["--imatrix", str(imat)] if imat else []) + ["--target-size", f"{mib}m", str(source),
-                                                                   str(out), "Q4_K_M", str(threads)]
+                                                                   str(tmp), "Q4_K_M", str(threads)]
         if not re.search(r"[-.](f16|bf16|f32)$", source.stem, re.I):
             cmd.insert(1, "--allow-requantize")
         log = config.home() / "compress.log"
         print(f"Compressing {source.name} to exactly {target_gb:.2f} GB, choosing the precision of every "
               f"tensor (details in {log}) ...")
-        with open(log, "a") as f:
-            res = subprocess.run(cmd, stdout=f, stderr=subprocess.STDOUT)
-        if res.returncode != 0 or not out.exists():
+        try:
+            with open(log, "a") as f:
+                res = subprocess.run(cmd, stdout=f, stderr=subprocess.STDOUT)
+        except BaseException:
+            tmp.unlink(missing_ok=True)
+            raise
+        if not _finish(tmp, out, res.returncode == 0):
             raise RuntimeError(f"llama-quantize failed; see {log}")
     result = {"path": str(out), "quant": "FIT", "size_gb": round(out.stat().st_size / 1024 ** 3, 2),
               "imatrix": bool(imat)}

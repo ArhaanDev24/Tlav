@@ -29,6 +29,7 @@ class _Source:
         self.chunk = chunk
         self.max_bytes = max_bytes
         self._fh = None if self.remote else open(path_or_url, "rb")
+        self.whole = False   # the server sent everything it will send (no Range support)
 
     def _fill(self, need: int) -> None:
         while len(self.buf) < need:
@@ -41,8 +42,18 @@ class _Source:
                 tok = os.environ.get("HF_TOKEN")
                 if tok:
                     req.add_header("Authorization", f"Bearer {tok}")
+                if self.whole:
+                    raise ValueError("GGUF header larger than limit")
                 with urllib.request.urlopen(req, timeout=60) as r:
-                    data = r.read()
+                    if getattr(r, "status", 206) == 200:
+                        # The server ignored the Range header and is sending the whole model (gigabytes).
+                        # Take only what a header can need, then stop.
+                        if start:
+                            raise ValueError("this server can't send part of a file")
+                        data = r.read(self.max_bytes)
+                        self.whole = True
+                    else:
+                        data = r.read(self.chunk)
             else:
                 self._fh.seek(start)
                 data = self._fh.read(self.chunk)

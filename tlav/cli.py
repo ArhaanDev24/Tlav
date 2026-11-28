@@ -3,6 +3,7 @@
 import argparse
 import json
 import os
+import struct
 import sys
 from pathlib import Path
 from typing import List, Optional
@@ -121,6 +122,19 @@ def cmd_doctor(args):
     config.save_state(hardware=hw.to_dict())
 
 
+def _check_model_file(path) -> Path:
+    """Stop early, in plain words, when a file given on the command line isn't a usable model."""
+    p = Path(path).expanduser()
+    if not p.is_file():
+        sys.exit(f"Model file not found: {p}")
+    try:
+        gguf.read(str(p))
+    except (ValueError, OSError, EOFError, struct.error):
+        sys.exit(f"{p.name} isn't a complete model file (GGUF). If it's a download that stopped, delete it and "
+                 "download it again.")
+    return p
+
+
 def cmd_bench(args):
     print("Measuring memory bandwidth (this decides how fast models can run)...")
     b = benchmark.quick_benchmark()
@@ -133,6 +147,7 @@ def cmd_bench(args):
     if not model:
         sys.exit("No model to benchmark; pass --model PATH or run `tlav setup` first.")
     hw = hardware.detect()
+    _check_model_file(model)
     print(f"Running llama-bench on {Path(model).name} ...")
     r = benchmark.real_benchmark(model, hw.physical_cores, runtime.require("llama-bench"))
     if not r:
@@ -489,7 +504,8 @@ def _local_model_file(plan, files=None) -> Optional[Path]:
         return f if f.exists() and hub._looks_like_gguf(f) else None
     model = _re.sub(r"[^a-z0-9.]+", "-", plan.model.name.lower()).strip("-")
     names = [f.name for f in config.models_dir().glob("*.gguf")
-             if model in f.stem.lower().replace("_", "-") and ".imatrix." not in f.name]
+             if model in f.stem.lower().replace("_", "-") and ".imatrix." not in f.name
+             and ".partial." not in f.name]
     hit = hub.find_quant_file(names, plan.quant.name)
     if hit and hub._looks_like_gguf(config.models_dir() / hit):
         return config.models_dir() / hit
@@ -691,9 +707,7 @@ def cmd_run(args):
         sys.exit("Tlav is already running (`tlav status`). Stop it first with `tlav stop`.")
     nodes = _nodes(args) if args.cluster else None
     if args.model:
-        path = Path(args.model).expanduser()
-        if not path.is_file():
-            sys.exit(f"Model file not found: {path}")
+        path = _check_model_file(args.model)
         hw = hardware.detect()
         nodes = nodes or [planner.Node(hw, benchmark.cached_or_run()["effective_gbps"])]
         plan = _plan_for_file(path, nodes, args.kv, force_split=args.force_split)
@@ -770,8 +784,7 @@ def cmd_chat(args):
     if args.model:  # a specific file: run it for this chat
         if server.status()["running"]:
             sys.exit("A model is already running; `tlav stop` first to chat with another file.")
-        if not Path(args.model).expanduser().is_file():
-            sys.exit(f"Model file not found: {Path(args.model).expanduser()}")
+        _check_model_file(args.model)
         hw = hardware.detect()
         path = Path(args.model).expanduser()
         plan = _plan_for_file(path, [planner.Node(hw, benchmark.cached_or_run()["effective_gbps"])], planner.DEFAULT_KV)
@@ -1039,9 +1052,7 @@ def cmd_service(args):
 def cmd_compress(args):
     hw = hardware.detect()
     if args.file:
-        src = Path(args.file).expanduser()
-        if not src.exists():
-            sys.exit(f"{src} not found")
+        src = _check_model_file(args.file)
         target = args.to or "Q4_K_M"
         if args.fit:
             info = gguf.read(str(src))
@@ -1082,7 +1093,8 @@ def cmd_compress(args):
 
 
 def cmd_list(args):
-    files = sorted(p for p in config.models_dir().glob("*.gguf") if ".imatrix." not in p.name)
+    files = sorted(p for p in config.models_dir().glob("*.gguf") if ".imatrix." not in p.name
+                   and ".partial." not in p.name)
     active = config.load_state().get("active", {}).get("path")
     if not files:
         print("No models downloaded yet.")

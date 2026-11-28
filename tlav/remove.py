@@ -48,7 +48,8 @@ class ModelFile:
         self.path = path
         stem = path.name[:-len(".gguf")] if path.name.endswith(".gguf") else path.name.split(".gguf")[0]
         # importance matrices Tlav built for it, and an unfinished download of it
-        self.extras = [p for pat in (".imatrix*", ".logits*") for p in path.parent.glob(stem + pat) if p != path]
+        self.extras = [p for pat in (".imatrix*", ".logits*", ".partial.*") for p in path.parent.glob(stem + pat)
+                       if p != path]
         part = path.with_name(path.name + ".part")
         if part.exists() and part != path:
             self.extras.append(part)
@@ -65,7 +66,8 @@ def model_files() -> List[ModelFile]:
     if not d.is_dir():
         return []
     by_name = lambda p: p.name.lower()      # the same A-Z order on every system
-    finished = sorted((p for p in d.glob("*.gguf") if ".imatrix" not in p.name), key=by_name)
+    finished = sorted((p for p in d.glob("*.gguf") if ".imatrix" not in p.name and ".partial." not in p.name),
+                      key=by_name)
     names = {p.name for p in finished}
     parts = sorted((p for p in d.glob("*.gguf.part") if p.name[:-len(".part")] not in names), key=by_name)
     return [ModelFile(p) for p in finished + parts]
