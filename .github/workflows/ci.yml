@@ -52,7 +52,7 @@ jobs:
           M=$(ls "$TLAV_HOME"/models/Qwen2.5-0.5B-Instruct-Q4_K_M*.gguf | head -1)   # -imat when that measured closer
           ask() { curl -s "http://127.0.0.1:$1/v1/chat/completions" -H "Content-Type: application/json" \
             -d '{"messages":[{"role":"user","content":"Name three planets."}],"max_tokens":40,"temperature":0}' \
-            | python -c "import json,sys; print(json.load(sys.stdin)['choices'][0]['message']['content'])"; }
+            | python -c "import json,sys; print(json.load(sys.stdin)['choices'][0]['message']['content'].strip())"; }
           tlav run --model "$M" --no-browser --detach --port 8101
           ask 8101 > single.txt && tlav stop
           nohup tlav worker --host 127.0.0.1 --port 50061 --discovery-port 50071 > w1.log 2>&1 &
